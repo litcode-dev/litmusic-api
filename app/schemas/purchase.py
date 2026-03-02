@@ -1,12 +1,14 @@
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 from pydantic import BaseModel, model_validator
 
 
 class CheckoutRequest(BaseModel):
     loop_id: uuid.UUID | None = None
     stem_pack_id: uuid.UUID | None = None
+    provider: Literal["flutterwave", "paystack"] = "flutterwave"
 
     @model_validator(mode="after")
     def exactly_one_product(self) -> "CheckoutRequest":
@@ -27,4 +29,4 @@ class PurchaseResponse(BaseModel):
 
 class CheckoutResponse(BaseModel):
     checkout_url: str
-    session_id: str
+    payment_reference: str

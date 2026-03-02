@@ -23,9 +23,15 @@ class Settings(BaseSettings):
     s3_bucket_name: str
     s3_cloudfront_url: str = ""  # e.g. https://d2q7nhojr9v45l.cloudfront.net
 
-    # Stripe
-    stripe_secret_key: str
-    stripe_webhook_secret: str
+    # Flutterwave
+    flw_secret_key: str = ""
+    flw_hash: str = ""  # Webhook verification hash (set in Flutterwave dashboard)
+
+    # Paystack
+    paystack_secret_key: str = ""
+
+    # Frontend
+    frontend_url: str = "https://litmusic.app"
 
     # OneSignal
     onesignal_app_id: str
