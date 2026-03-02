@@ -26,6 +26,7 @@ async def create_loop(
     file: UploadFile,
     data: LoopCreate,
     created_by: uuid.UUID,
+    thumbnail: UploadFile | None = None,
 ) -> Loop:
     wav_bytes = await validate_wav_upload(file)
     preview_mp3 = generate_preview_mp3(wav_bytes)
@@ -38,6 +39,14 @@ async def create_loop(
 
     await s3_service.upload_bytes(enc_key, encrypted_wav)
     await s3_service.upload_bytes(prev_key, preview_mp3, "audio/mpeg")
+
+    thumb_key = None
+    if thumbnail:
+        thumb_bytes = await thumbnail.read()
+        content_type = thumbnail.content_type or "image/jpeg"
+        ext = content_type.split("/")[-1] if "/" in content_type else "jpg"
+        thumb_key = s3_service.s3_key_for_loop_thumbnail(loop_id, ext)
+        await s3_service.upload_bytes(thumb_key, thumb_bytes, content_type)
 
     audio, sr = sf.read(io.BytesIO(wav_bytes))
     duration = int(len(audio) / sr)
@@ -57,6 +66,7 @@ async def create_loop(
         is_paid=not data.is_free,
         file_s3_key=enc_key,
         preview_s3_key=prev_key,
+        thumbnail_s3_key=thumb_key,
         aes_key=aes_key,
         aes_iv=aes_iv,
         created_by=created_by,

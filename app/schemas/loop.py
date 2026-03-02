@@ -55,7 +55,9 @@ class LoopResponse(BaseModel):
     is_free: bool
     is_paid: bool
     preview_s3_key: str | None = Field(default=None, exclude=True)
+    thumbnail_s3_key: str | None = Field(default=None, exclude=True)
     preview_url: str | None = None
+    thumbnail_url: str | None = None
     waveform_data: list | None
     download_count: int
     play_count: int
@@ -64,11 +66,13 @@ class LoopResponse(BaseModel):
     model_config = {"from_attributes": True}
 
     @model_validator(mode="after")
-    def build_preview_url(self) -> "LoopResponse":
+    def build_urls(self) -> "LoopResponse":
         from app.config import get_settings
+        base = get_settings().s3_cloudfront_url.rstrip("/")
         if self.preview_s3_key:
-            base = get_settings().s3_cloudfront_url.rstrip("/")
             self.preview_url = f"{base}/{self.preview_s3_key}" if base else self.preview_s3_key
+        if self.thumbnail_s3_key:
+            self.thumbnail_url = f"{base}/{self.thumbnail_s3_key}" if base else self.thumbnail_s3_key
         return self
 
 

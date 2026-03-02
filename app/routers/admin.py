@@ -22,6 +22,7 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 @router.post("/loops")
 async def upload_loop(
     file: UploadFile = File(...),
+    thumbnail: UploadFile | None = File(None),
     title: str = Form(...),
     genre: Genre = Form(...),
     bpm: int = Form(...),
@@ -38,7 +39,7 @@ async def upload_loop(
         tempo_feel=tempo_feel, price=price, is_free=is_free,
         tags=[t.strip() for t in tags.split(",") if t.strip()],
     )
-    loop = await loop_service.create_loop(db, file, data, producer.id)
+    loop = await loop_service.create_loop(db, file, data, producer.id, thumbnail=thumbnail)
     from app.tasks.download_tasks import generate_waveform_task
     generate_waveform_task.delay(str(loop.id))
     return success(LoopResponse.model_validate(loop).model_dump(), "Loop uploaded")
