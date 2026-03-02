@@ -1,0 +1,25 @@
+import uuid
+import enum
+from datetime import datetime
+from decimal import Decimal
+from sqlalchemy import String, Numeric, DateTime, ForeignKey, func, Enum as SAEnum
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column
+from app.database import Base
+
+
+class PurchaseType(str, enum.Enum):
+    one_time = "one_time"
+
+
+class Purchase(Base):
+    __tablename__ = "purchases"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    loop_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("loops.id"), nullable=True, index=True)
+    stem_pack_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("stem_packs.id"), nullable=True, index=True)
+    stripe_payment_intent_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    amount_paid: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    purchase_type: Mapped[PurchaseType] = mapped_column(SAEnum(PurchaseType), default=PurchaseType.one_time)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
