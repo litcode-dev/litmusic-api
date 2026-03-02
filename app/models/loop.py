@@ -1,0 +1,57 @@
+import uuid
+import enum
+from datetime import datetime
+from decimal import Decimal
+from sqlalchemy import (
+    String, Integer, Boolean, Numeric, Text,
+    DateTime, Enum as SAEnum, ForeignKey, func, ARRAY
+)
+from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.orm import Mapped, mapped_column
+from app.database import Base
+
+
+class Genre(str, enum.Enum):
+    afrobeat = "Afrobeat"
+    amapiano = "Amapiano"
+    trap = "Trap"
+    boom_bap = "Boom Bap"
+    lo_fi = "Lo-fi"
+    gospel = "Gospel"
+    afrobeat_worship = "Afrobeat Worship"
+    contemporary_worship = "Contemporary Worship"
+    dancehall = "Dancehall"
+    afrohouse = "Afrohouse"
+    highlife_gospel = "Highlife Gospel"
+
+
+class TempoFeel(str, enum.Enum):
+    slow = "slow"
+    mid = "mid"
+    fast = "fast"
+
+
+class Loop(Base):
+    __tablename__ = "loops"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(String(300), unique=True, index=True, nullable=False)
+    genre: Mapped[Genre] = mapped_column(SAEnum(Genre), nullable=False, index=True)
+    bpm: Mapped[int] = mapped_column(Integer, nullable=False)
+    key: Mapped[str] = mapped_column(String(50), nullable=False)
+    duration: Mapped[int] = mapped_column(Integer, nullable=False)
+    tempo_feel: Mapped[TempoFeel] = mapped_column(SAEnum(TempoFeel), nullable=False)
+    tags: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
+    price: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    is_free: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_paid: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    file_s3_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    preview_s3_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    aes_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    aes_iv: Mapped[str | None] = mapped_column(Text, nullable=True)
+    waveform_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    download_count: Mapped[int] = mapped_column(Integer, default=0)
+    play_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
