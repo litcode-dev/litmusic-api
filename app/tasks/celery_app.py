@@ -1,0 +1,23 @@
+from celery import Celery
+from app.config import get_settings
+
+settings = get_settings()
+
+celery_app = Celery(
+    "litmusic",
+    broker=settings.celery_broker_url,
+    backend=settings.celery_result_backend,
+    include=[
+        "app.tasks.notification_tasks",
+        "app.tasks.download_tasks",
+        "app.tasks.scheduled_tasks",
+    ],
+)
+
+celery_app.conf.beat_schedule = {
+    "cleanup-expired-downloads-hourly": {
+        "task": "app.tasks.download_tasks.cleanup_expired_downloads",
+        "schedule": 3600.0,
+    },
+}
+celery_app.conf.timezone = "UTC"
