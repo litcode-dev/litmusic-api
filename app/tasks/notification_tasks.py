@@ -2,7 +2,7 @@ import asyncio
 from app.tasks.celery_app import celery_app
 
 
-@celery_app.task(name="notification_tasks.send_purchase_confirmation")
+@celery_app.task
 def send_purchase_confirmation(user_id: str, purchase_id: str):
     async def _run():
         from app.database import AsyncSessionLocal
@@ -29,7 +29,7 @@ def send_purchase_confirmation(user_id: str, purchase_id: str):
     asyncio.run(_run())
 
 
-@celery_app.task(name="notification_tasks.send_new_loop_notification")
+@celery_app.task
 def send_new_loop_notification(loop_id: str):
     async def _run():
         from app.database import AsyncSessionLocal

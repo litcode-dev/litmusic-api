@@ -2,7 +2,7 @@ import asyncio
 from app.tasks.celery_app import celery_app
 
 
-@celery_app.task(name="download_tasks.generate_waveform_task")
+@celery_app.task
 def generate_waveform_task(loop_id: str):
     async def _run():
         import uuid
@@ -33,7 +33,7 @@ def generate_waveform_task(loop_id: str):
     asyncio.run(_run())
 
 
-@celery_app.task(name="download_tasks.cleanup_expired_downloads")
+@celery_app.task
 def cleanup_expired_downloads():
     async def _run():
         from app.database import AsyncSessionLocal

@@ -44,7 +44,8 @@ async def client(db_session):
     app.dependency_overrides[get_db] = lambda: db_session
     app.dependency_overrides[get_redis] = lambda: mock_redis
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        yield c
-
-    app.dependency_overrides.clear()
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            yield c
+    finally:
+        app.dependency_overrides.clear()
