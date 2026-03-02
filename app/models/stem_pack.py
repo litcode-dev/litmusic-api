@@ -3,7 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 from sqlalchemy import String, Integer, Numeric, Text, DateTime, ForeignKey, func, ARRAY, Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 from app.models.loop import Genre
 
@@ -23,6 +23,8 @@ class StemPack(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    stems: Mapped[list["Stem"]] = relationship("Stem", back_populates="stem_pack", lazy="noload")
 
 
 class Stem(Base):

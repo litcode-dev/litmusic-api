@@ -2,6 +2,7 @@ import uuid
 import re
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from app.models.stem_pack import StemPack, Stem
 from app.models.purchase import Purchase
 from app.models.user import User
@@ -78,12 +79,14 @@ async def add_stem_to_pack(
 
 
 async def get_stem_pack_with_stems(db: AsyncSession, pack_id: uuid.UUID) -> StemPack:
-    pack = await db.get(StemPack, pack_id)
-    if not pack:
+    result = await db.scalar(
+        select(StemPack)
+        .options(selectinload(StemPack.stems))
+        .where(StemPack.id == pack_id)
+    )
+    if not result:
         raise NotFoundError("StemPack not found")
-    stems_result = await db.scalars(select(Stem).where(Stem.stem_pack_id == pack_id))
-    pack.__dict__["stems"] = list(stems_result.all())
-    return pack
+    return result
 
 
 async def check_stem_pack_entitlement(db: AsyncSession, user: User, pack_id: uuid.UUID) -> None:

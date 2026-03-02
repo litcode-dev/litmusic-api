@@ -39,8 +39,8 @@ async def create_loop(
     await s3_service.upload_bytes(enc_key, encrypted_wav)
     await s3_service.upload_bytes(prev_key, preview_mp3, "audio/mpeg")
 
-    audio, _ = sf.read(io.BytesIO(wav_bytes))
-    duration = int(len(audio) / 44100)
+    audio, sr = sf.read(io.BytesIO(wav_bytes))
+    duration = int(len(audio) / sr)
 
     loop = Loop(
         id=uuid.UUID(loop_id),
