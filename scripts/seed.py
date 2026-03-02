@@ -19,14 +19,14 @@ async def seed():
         admin = User(
             id=uuid.uuid4(),
             email="admin@litmusic.app",
-            password_hash=hash_password("admin1234"),
+            password_hash=await hash_password("admin1234"),
             full_name="LitMusic Admin",
             role=UserRole.admin,
         )
         user = User(
             id=uuid.uuid4(),
             email="producer@litmusic.app",
-            password_hash=hash_password("producer1234"),
+            password_hash=await hash_password("producer1234"),
             full_name="Test Producer",
             role=UserRole.free,
         )

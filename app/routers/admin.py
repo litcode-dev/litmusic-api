@@ -112,6 +112,9 @@ async def delete_stem_pack(
     from sqlalchemy import select
     from app.services import s3_service
     pack = await db.get(StemPack, pack_id)
+    if not pack:
+        from app.exceptions import NotFoundError
+        raise NotFoundError("StemPack not found")
     stems = await db.scalars(select(Stem).where(Stem.stem_pack_id == pack_id))
     for stem in stems.all():
         if stem.file_s3_key:

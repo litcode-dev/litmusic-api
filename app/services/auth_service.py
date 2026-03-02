@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from datetime import datetime, timedelta, timezone
 import jwt
@@ -15,12 +16,16 @@ ALGORITHM = "HS256"
 REFRESH_PREFIX = "refresh:"
 
 
-def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+async def hash_password(password: str) -> str:
+    return await asyncio.to_thread(
+        lambda: bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    )
 
 
-def verify_password(plain: str, hashed: str) -> bool:
-    return bcrypt.checkpw(plain.encode(), hashed.encode())
+async def verify_password(plain: str, hashed: str) -> bool:
+    return await asyncio.to_thread(
+        lambda: bcrypt.checkpw(plain.encode(), hashed.encode())
+    )
 
 
 def create_access_token(user_id: str, role: str) -> str:
@@ -67,7 +72,7 @@ async def register_user(db: AsyncSession, email: str, password: str, full_name: 
         raise ConflictError("Email already registered")
     user = User(
         email=email,
-        password_hash=hash_password(password),
+        password_hash=await hash_password(password),
         full_name=full_name,
         role=UserRole.free,
     )
@@ -79,7 +84,7 @@ async def register_user(db: AsyncSession, email: str, password: str, full_name: 
 
 async def authenticate_user(db: AsyncSession, email: str, password: str) -> User:
     user = await db.scalar(select(User).where(User.email == email))
-    if not user or not verify_password(password, user.password_hash):
+    if not user or not await verify_password(password, user.password_hash):
         raise UnauthorizedError("Invalid credentials")
     return user
 

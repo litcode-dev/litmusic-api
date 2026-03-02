@@ -20,11 +20,18 @@ async def list_stem_packs(
     page_size: int = 20,
     db: AsyncSession = Depends(get_db),
 ):
-    from sqlalchemy import func
+    from sqlalchemy import func, select
     from app.models.stem_pack import StemPack
+    count_q = select(func.count()).select_from(select(StemPack).subquery())
+    total = await db.scalar(count_q)
     q = select(StemPack).offset((page - 1) * page_size).limit(page_size)
     packs = await db.scalars(q)
-    return success({"items": [StemPackResponse.model_validate(p).model_dump() for p in packs.all()]})
+    return success({
+        "items": [StemPackResponse.model_validate(p).model_dump() for p in packs.all()],
+        "total": total or 0,
+        "page": page,
+        "page_size": page_size,
+    })
 
 
 @router.get("/{pack_id}")

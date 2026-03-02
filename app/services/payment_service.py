@@ -1,3 +1,4 @@
+import asyncio
 import stripe
 import uuid
 from decimal import Decimal
@@ -8,7 +9,7 @@ from app.models.purchase import Purchase, PurchaseType
 from app.models.loop import Loop
 from app.models.stem_pack import StemPack
 from app.models.user import User
-from app.exceptions import NotFoundError, PaymentError
+from app.exceptions import NotFoundError, PaymentError, AppError
 from app.schemas.purchase import CheckoutRequest
 
 settings = get_settings()
@@ -36,7 +37,8 @@ async def create_checkout_session(
         metadata = {"stem_pack_id": str(request.stem_pack_id), "user_id": str(user.id)}
 
     try:
-        session = stripe.checkout.Session.create(
+        session = await asyncio.to_thread(
+            stripe.checkout.Session.create,
             payment_method_types=["card"],
             line_items=[{
                 "price_data": {
@@ -63,7 +65,7 @@ async def handle_webhook(db: AsyncSession, payload: bytes, sig_header: str) -> N
             payload, sig_header, settings.stripe_webhook_secret
         )
     except (ValueError, stripe.SignatureVerificationError):
-        raise PaymentError("Invalid webhook signature")
+        raise AppError("Invalid webhook signature", status_code=400)
 
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]

@@ -6,10 +6,11 @@ from app.services.auth_service import (
 from app.exceptions import UnauthorizedError
 
 
-def test_password_hash_and_verify():
-    hashed = hash_password("mysecret")
-    assert verify_password("mysecret", hashed)
-    assert not verify_password("wrong", hashed)
+@pytest.mark.asyncio
+async def test_password_hash_and_verify():
+    hashed = await hash_password("mysecret")
+    assert await verify_password("mysecret", hashed)
+    assert not await verify_password("wrong", hashed)
 
 
 def test_access_token_encodes_user_info():
@@ -30,6 +31,7 @@ def test_refresh_token_is_uuid_string():
     uuid.UUID(token)  # raises if not valid UUID
 
 
-def test_different_passwords_do_not_match():
-    hashed = hash_password("password1")
-    assert not verify_password("password2", hashed)
+@pytest.mark.asyncio
+async def test_different_passwords_do_not_match():
+    hashed = await hash_password("password1")
+    assert not await verify_password("password2", hashed)
