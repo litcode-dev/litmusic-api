@@ -39,3 +39,5 @@ class Stem(Base):
     aes_iv: Mapped[str | None] = mapped_column(Text, nullable=True)
     duration: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    stem_pack: Mapped["StemPack"] = relationship("StemPack", back_populates="stems")
