@@ -1,0 +1,145 @@
+import uuid
+import re
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
+from app.models.loop import Loop
+from app.models.purchase import Purchase
+from app.models.user import User
+from app.schemas.loop import LoopCreate, LoopUpdate, LoopFilter
+from app.exceptions import NotFoundError, EntitlementError
+from app.services import s3_service, encryption_service
+from app.utils.audio_validator import validate_wav_upload
+from app.utils.ffmpeg_helpers import generate_preview_mp3
+from fastapi import UploadFile
+import soundfile as sf
+import io
+
+
+def _slugify(title: str, uid: str) -> str:
+    slug = re.sub(r"[^\w\s-]", "", title.lower())
+    slug = re.sub(r"[\s_-]+", "-", slug).strip("-")
+    return f"{slug}-{uid[:8]}"
+
+
+async def create_loop(
+    db: AsyncSession,
+    file: UploadFile,
+    data: LoopCreate,
+    created_by: uuid.UUID,
+) -> Loop:
+    wav_bytes = await validate_wav_upload(file)
+    preview_mp3 = generate_preview_mp3(wav_bytes)
+    aes_key, aes_iv = encryption_service.generate_key_and_iv()
+    encrypted_wav = encryption_service.encrypt_bytes(wav_bytes, aes_key, aes_iv)
+
+    loop_id = str(uuid.uuid4())
+    enc_key = s3_service.s3_key_for_encrypted_loop(loop_id)
+    prev_key = s3_service.s3_key_for_loop_preview(loop_id)
+
+    await s3_service.upload_bytes(enc_key, encrypted_wav)
+    await s3_service.upload_bytes(prev_key, preview_mp3, "audio/mpeg")
+
+    audio, _ = sf.read(io.BytesIO(wav_bytes))
+    duration = int(len(audio) / 44100)
+
+    loop = Loop(
+        id=uuid.UUID(loop_id),
+        title=data.title,
+        slug=_slugify(data.title, loop_id),
+        genre=data.genre,
+        bpm=data.bpm,
+        key=data.key,
+        duration=duration,
+        tempo_feel=data.tempo_feel,
+        tags=data.tags,
+        price=data.price,
+        is_free=data.is_free,
+        is_paid=not data.is_free,
+        file_s3_key=enc_key,
+        preview_s3_key=prev_key,
+        aes_key=aes_key,
+        aes_iv=aes_iv,
+        created_by=created_by,
+    )
+    db.add(loop)
+    await db.commit()
+    await db.refresh(loop)
+    return loop
+
+
+async def get_loop(db: AsyncSession, loop_id: uuid.UUID) -> Loop:
+    loop = await db.get(Loop, loop_id)
+    if not loop:
+        raise NotFoundError(f"Loop {loop_id} not found")
+    return loop
+
+
+async def list_loops(db: AsyncSession, filters: LoopFilter) -> tuple[list[Loop], int]:
+    q = select(Loop)
+    if filters.genre:
+        q = q.where(Loop.genre == filters.genre)
+    if filters.bpm_min is not None:
+        q = q.where(Loop.bpm >= filters.bpm_min)
+    if filters.bpm_max is not None:
+        q = q.where(Loop.bpm <= filters.bpm_max)
+    if filters.key:
+        q = q.where(Loop.key.ilike(f"%{filters.key}%"))
+    if filters.tempo_feel:
+        q = q.where(Loop.tempo_feel == filters.tempo_feel)
+    if filters.is_free is not None:
+        q = q.where(Loop.is_free == filters.is_free)
+    if filters.tags:
+        q = q.where(Loop.tags.overlap(filters.tags))
+
+    count_q = select(func.count()).select_from(q.subquery())
+    total = await db.scalar(count_q)
+
+    sort_map = {
+        "newest": Loop.created_at.desc(),
+        "most_downloaded": Loop.download_count.desc(),
+        "most_played": Loop.play_count.desc(),
+    }
+    q = q.order_by(sort_map.get(filters.sort, Loop.created_at.desc()))
+    q = q.offset((filters.page - 1) * filters.page_size).limit(filters.page_size)
+    result = await db.scalars(q)
+    return list(result.all()), total or 0
+
+
+async def increment_play_count(db: AsyncSession, loop_id: uuid.UUID) -> None:
+    loop = await get_loop(db, loop_id)
+    loop.play_count += 1
+    await db.commit()
+
+
+async def check_download_entitlement(
+    db: AsyncSession, user: User, loop: Loop
+) -> None:
+    if loop.is_free:
+        return
+    purchase = await db.scalar(
+        select(Purchase).where(
+            Purchase.user_id == user.id,
+            Purchase.loop_id == loop.id,
+        )
+    )
+    if not purchase:
+        raise EntitlementError()
+
+
+async def update_loop(db: AsyncSession, loop_id: uuid.UUID, data: LoopUpdate) -> Loop:
+    loop = await get_loop(db, loop_id)
+    for field, value in data.model_dump(exclude_none=True).items():
+        setattr(loop, field, value)
+    await db.commit()
+    await db.refresh(loop)
+    return loop
+
+
+async def delete_loop(db: AsyncSession, loop_id: uuid.UUID) -> None:
+    loop = await get_loop(db, loop_id)
+    if loop.file_s3_key:
+        await s3_service.delete_object(loop.file_s3_key)
+    if loop.preview_s3_key:
+        await s3_service.delete_object(loop.preview_s3_key)
+    await db.delete(loop)
+    await db.commit()
