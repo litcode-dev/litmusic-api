@@ -17,3 +17,19 @@ def test_success_default_message():
     result = success()
     assert result["message"] == "OK"
     assert result["data"] is None
+
+
+# Also test UserRegister validation
+from app.schemas.user import UserRegister
+import pytest
+from pydantic import ValidationError
+
+
+def test_user_register_password_too_short():
+    with pytest.raises(ValidationError):
+        UserRegister(email="test@example.com", password="short", full_name="Test")
+
+
+def test_user_register_valid():
+    u = UserRegister(email="test@example.com", password="longpassword", full_name="Test User")
+    assert u.email == "test@example.com"
