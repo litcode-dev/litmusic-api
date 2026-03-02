@@ -1,3 +1,4 @@
+import asyncio
 import boto3
 from app.config import get_settings
 
@@ -14,30 +15,39 @@ def _get_client():
 
 
 async def upload_bytes(key: str, data: bytes, content_type: str = "application/octet-stream") -> str:
-    """Upload bytes to S3. Returns the S3 key."""
-    client = _get_client()
-    client.put_object(
-        Bucket=settings.s3_bucket_name,
-        Key=key,
-        Body=data,
-        ContentType=content_type,
-    )
-    return key
+    """Upload bytes to S3 without blocking the event loop. Returns the S3 key."""
+    def _upload():
+        client = _get_client()
+        client.put_object(
+            Bucket=settings.s3_bucket_name,
+            Key=key,
+            Body=data,
+            ContentType=content_type,
+        )
+        return key
+
+    return await asyncio.to_thread(_upload)
 
 
 async def generate_presigned_url(key: str, expiry_seconds: int = 900) -> str:
     """Generate a pre-signed GET URL valid for expiry_seconds (default 15 min)."""
-    client = _get_client()
-    return client.generate_presigned_url(
-        "get_object",
-        Params={"Bucket": settings.s3_bucket_name, "Key": key},
-        ExpiresIn=expiry_seconds,
-    )
+    def _presign():
+        client = _get_client()
+        return client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": settings.s3_bucket_name, "Key": key},
+            ExpiresIn=expiry_seconds,
+        )
+
+    return await asyncio.to_thread(_presign)
 
 
 async def delete_object(key: str) -> None:
-    client = _get_client()
-    client.delete_object(Bucket=settings.s3_bucket_name, Key=key)
+    def _delete():
+        client = _get_client()
+        client.delete_object(Bucket=settings.s3_bucket_name, Key=key)
+
+    await asyncio.to_thread(_delete)
 
 
 def s3_key_for_encrypted_loop(loop_id: str) -> str:

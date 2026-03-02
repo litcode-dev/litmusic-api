@@ -1,6 +1,7 @@
 import subprocess
 import os
 import tempfile
+from pathlib import Path
 
 
 def generate_preview_mp3(wav_bytes: bytes, duration_seconds: int = 15) -> bytes:
@@ -12,7 +13,7 @@ def generate_preview_mp3(wav_bytes: bytes, duration_seconds: int = 15) -> bytes:
         tmp_in.write(wav_bytes)
         tmp_in_path = tmp_in.name
 
-    tmp_out_path = tmp_in_path.replace(".wav", "_preview.mp3")
+    tmp_out_path = str(Path(tmp_in_path).with_suffix("")) + "_preview.mp3"
     try:
         subprocess.run(
             [
