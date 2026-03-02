@@ -75,10 +75,19 @@ async def me(user=Depends(get_current_user)):
 
 @router.get("/oauth/google")
 async def google_oauth_redirect():
-    """Return the Google authorization URL for the client to redirect to."""
+    """Redirect the browser directly to Google's OAuth2 authorization page."""
+    from fastapi.responses import RedirectResponse
     state = secrets.token_urlsafe(16)
     url = oauth_service.get_google_auth_url(state)
-    return success({"authorization_url": url, "state": state})
+    response = RedirectResponse(url=url, status_code=302)
+    response.set_cookie(
+        key="oauth_state",
+        value=state,
+        httponly=True,
+        max_age=300,  # 5 minutes
+        samesite="lax",
+    )
+    return response
 
 
 @router.post("/oauth/google/callback")
