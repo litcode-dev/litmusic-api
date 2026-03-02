@@ -22,12 +22,23 @@ async def create_checkout(
     return success(result, "Checkout session created")
 
 
-@router.post("/webhook")
-async def stripe_webhook(
+@router.post("/webhook/flutterwave")
+async def flutterwave_webhook(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    stripe_signature: str = Header(None, alias="stripe-signature"),
+    verif_hash: str = Header(None, alias="verif-hash"),
 ):
     payload = await request.body()
-    await payment_service.handle_webhook(db, payload, stripe_signature)
+    await payment_service.handle_flutterwave_webhook(db, payload, verif_hash)
+    return {"received": True}
+
+
+@router.post("/webhook/paystack")
+async def paystack_webhook(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    x_paystack_signature: str = Header(None, alias="x-paystack-signature"),
+):
+    payload = await request.body()
+    await payment_service.handle_paystack_webhook(db, payload, x_paystack_signature)
     return {"received": True}
