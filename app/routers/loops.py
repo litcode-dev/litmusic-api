@@ -1,0 +1,98 @@
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import StreamingResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+import httpx
+from app.database import get_db
+from app.middleware.auth_middleware import get_current_user
+from app.middleware.rate_limit import limiter
+from app.services import loop_service, s3_service
+from app.schemas.loop import LoopFilter, LoopResponse
+from app.schemas.common import success
+from app.models.loop import Genre, TempoFeel
+import uuid
+
+router = APIRouter(prefix="/loops", tags=["loops"])
+
+
+@router.get("")
+async def list_loops(
+    genre: Genre | None = None,
+    bpm_min: int | None = None,
+    bpm_max: int | None = None,
+    key: str | None = None,
+    tempo_feel: TempoFeel | None = None,
+    is_free: bool | None = None,
+    sort: str = "newest",
+    page: int = 1,
+    page_size: int = 20,
+    db: AsyncSession = Depends(get_db),
+):
+    filters = LoopFilter(
+        genre=genre, bpm_min=bpm_min, bpm_max=bpm_max,
+        key=key, tempo_feel=tempo_feel, is_free=is_free,
+        sort=sort, page=page, page_size=page_size,
+    )
+    loops, total = await loop_service.list_loops(db, filters)
+    return success({
+        "items": [LoopResponse.model_validate(l).model_dump() for l in loops],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    })
+
+
+@router.get("/{loop_id}")
+async def get_loop(loop_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    loop = await loop_service.get_loop(db, loop_id)
+    return success(LoopResponse.model_validate(loop).model_dump())
+
+
+@router.get("/{loop_id}/preview")
+async def stream_preview(loop_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    loop = await loop_service.get_loop(db, loop_id)
+    url = await s3_service.generate_presigned_url(loop.preview_s3_key, expiry_seconds=300)
+    async def _stream():
+        async with httpx.AsyncClient() as client:
+            async with client.stream("GET", url) as resp:
+                async for chunk in resp.aiter_bytes(8192):
+                    yield chunk
+    return StreamingResponse(_stream(), media_type="audio/mpeg")
+
+
+@router.post("/{loop_id}/play")
+async def record_play(loop_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    await loop_service.increment_play_count(db, loop_id)
+    return success(message="Play recorded")
+
+
+@router.get("/{loop_id}/download")
+async def download_loop(
+    loop_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    from datetime import datetime, timedelta, timezone
+    from app.models.download import Download
+
+    loop = await loop_service.get_loop(db, loop_id)
+    await loop_service.check_download_entitlement(db, user, loop)
+
+    signed_url = await s3_service.generate_presigned_url(loop.file_s3_key, expiry_seconds=900)
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+
+    dl = Download(
+        user_id=user.id,
+        loop_id=loop.id,
+        download_url=signed_url,
+        expires_at=expires_at,
+    )
+    db.add(dl)
+    loop.download_count += 1
+    await db.commit()
+
+    return success({
+        "signed_url": signed_url,
+        "aes_key": loop.aes_key,
+        "aes_iv": loop.aes_iv,
+        "expires_in_seconds": 900,
+    })
