@@ -4,7 +4,7 @@ from fastapi import UploadFile
 from app.exceptions import AppError
 
 MAX_FILE_SIZE_BYTES = 30 * 1024 * 1024  # 30 MB
-REQUIRED_SAMPLE_RATE = 44100
+ALLOWED_SAMPLE_RATES = {44100, 48000}
 
 
 async def validate_wav_upload(file: UploadFile) -> bytes:
@@ -18,9 +18,9 @@ async def validate_wav_upload(file: UploadFile) -> bytes:
     except Exception:
         raise AppError("Invalid audio file — must be a valid WAV", status_code=422)
 
-    if sample_rate != REQUIRED_SAMPLE_RATE:
+    if sample_rate not in ALLOWED_SAMPLE_RATES:
         raise AppError(
-            f"Sample rate must be 44100 Hz, got {sample_rate} Hz", status_code=422
+            f"Sample rate must be 44100 or 48000 Hz, got {sample_rate} Hz", status_code=422
         )
 
     return content

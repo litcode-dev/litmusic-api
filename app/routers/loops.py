@@ -77,13 +77,13 @@ async def download_loop(
     loop = await loop_service.get_loop(db, loop_id)
     await loop_service.check_download_entitlement(db, user, loop)
 
-    signed_url = await s3_service.generate_presigned_url(loop.file_s3_key, expiry_seconds=900)
+    download_url = await s3_service.get_download_url(loop.file_s3_key, expiry_seconds=900)
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
 
     dl = Download(
         user_id=user.id,
         loop_id=loop.id,
-        download_url=signed_url,
+        download_url=download_url,
         expires_at=expires_at,
     )
     db.add(dl)
@@ -91,7 +91,7 @@ async def download_loop(
     await db.commit()
 
     return success({
-        "signed_url": signed_url,
+        "signed_url": download_url,
         "aes_key": loop.aes_key,
         "aes_iv": loop.aes_iv,
         "expires_in_seconds": 900,

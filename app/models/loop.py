@@ -48,6 +48,7 @@ class Loop(Base):
     is_paid: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     file_s3_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     preview_s3_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    thumbnail_s3_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     aes_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     aes_iv: Mapped[str | None] = mapped_column(Text, nullable=True)
     waveform_data: Mapped[list | None] = mapped_column(JSONB, nullable=True)

@@ -42,6 +42,19 @@ async def generate_presigned_url(key: str, expiry_seconds: int = 900) -> str:
     return await asyncio.to_thread(_presign)
 
 
+async def get_download_url(key: str, expiry_seconds: int = 900) -> str:
+    """Return a download URL for a key.
+
+    Uses a plain CloudFront URL when S3_CLOUDFRONT_URL is configured
+    (files are AES-encrypted, so no additional signing is needed).
+    Falls back to an S3 presigned URL otherwise.
+    """
+    if settings.s3_cloudfront_url:
+        base = settings.s3_cloudfront_url.rstrip("/")
+        return f"{base}/{key}"
+    return await generate_presigned_url(key, expiry_seconds)
+
+
 async def delete_object(key: str) -> None:
     def _delete():
         client = _get_client()

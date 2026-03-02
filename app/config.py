@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     aws_secret_access_key: str
     aws_region: str = "us-east-1"
     s3_bucket_name: str
+    s3_cloudfront_url: str = ""  # e.g. https://d2q7nhojr9v45l.cloudfront.net
 
     # Stripe
     stripe_secret_key: str

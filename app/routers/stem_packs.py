@@ -52,19 +52,19 @@ async def download_stem_pack(
 
     download_links = []
     for stem in stem_list:
-        signed_url = await s3_service.generate_presigned_url(stem.file_s3_key, expiry_seconds=900)
+        download_url = await s3_service.get_download_url(stem.file_s3_key, expiry_seconds=900)
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
         dl = Download(
             user_id=user.id,
             stem_id=stem.id,
-            download_url=signed_url,
+            download_url=download_url,
             expires_at=expires_at,
         )
         db.add(dl)
         download_links.append({
             "stem_id": str(stem.id),
             "label": stem.label,
-            "signed_url": signed_url,
+            "signed_url": download_url,
             "aes_key": stem.aes_key,
             "aes_iv": stem.aes_iv,
             "expires_in_seconds": 900,

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from decimal import Decimal
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from app.models.loop import Genre, TempoFeel
 
 
@@ -54,13 +54,22 @@ class LoopResponse(BaseModel):
     price: Decimal
     is_free: bool
     is_paid: bool
-    preview_s3_key: str | None
+    preview_s3_key: str | None = Field(default=None, exclude=True)
+    preview_url: str | None = None
     waveform_data: list | None
     download_count: int
     play_count: int
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="after")
+    def build_preview_url(self) -> "LoopResponse":
+        from app.config import get_settings
+        if self.preview_s3_key:
+            base = get_settings().s3_cloudfront_url.rstrip("/")
+            self.preview_url = f"{base}/{self.preview_s3_key}" if base else self.preview_s3_key
+        return self
 
 
 class LoopFilter(BaseModel):
