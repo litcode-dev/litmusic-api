@@ -71,6 +71,10 @@ def s3_key_for_loop_preview(loop_id: str) -> str:
     return f"previews/{loop_id}_preview.mp3"
 
 
+def s3_key_for_loop_thumbnail(loop_id: str, ext: str = "jpg") -> str:
+    return f"thumbnails/{loop_id}_thumbnail.{ext}"
+
+
 def s3_key_for_encrypted_stem(stem_id: str) -> str:
     return f"stems/encrypted/{stem_id}.wav.enc"
 
