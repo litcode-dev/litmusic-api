@@ -19,9 +19,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # 1. Add new enum values to the existing type
+    # 1. Add new enum values to the existing type.
+    #    PostgreSQL requires these to be committed before they can be used in DML,
+    #    so we issue an explicit COMMIT then continue in a new implicit transaction.
     op.execute("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'user'")
     op.execute("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'producer'")
+    op.execute("COMMIT")
 
     # 2. Migrate existing data: free → user
     op.execute("UPDATE users SET role = 'user' WHERE role = 'free'")
