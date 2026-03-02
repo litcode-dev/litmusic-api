@@ -1,0 +1,122 @@
+from fastapi import APIRouter, Depends, UploadFile, File, Form
+from sqlalchemy.ext.asyncio import AsyncSession
+from decimal import Decimal
+from app.database import get_db
+from app.middleware.auth_middleware import require_admin
+from app.services import loop_service, stem_pack_service
+from app.schemas.loop import LoopCreate, LoopUpdate, LoopResponse
+from app.schemas.stem_pack import StemPackCreate, StemCreate, StemPackResponse, StemResponse
+from app.schemas.common import success
+from app.models.loop import Genre, TempoFeel
+import uuid
+
+router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+@router.post("/loops")
+async def upload_loop(
+    file: UploadFile = File(...),
+    title: str = Form(...),
+    genre: Genre = Form(...),
+    bpm: int = Form(...),
+    key: str = Form(...),
+    tempo_feel: TempoFeel = Form(...),
+    price: Decimal = Form(...),
+    is_free: bool = Form(False),
+    tags: str = Form(""),  # comma-separated
+    db: AsyncSession = Depends(get_db),
+    admin=Depends(require_admin),
+):
+    data = LoopCreate(
+        title=title, genre=genre, bpm=bpm, key=key,
+        tempo_feel=tempo_feel, price=price, is_free=is_free,
+        tags=[t.strip() for t in tags.split(",") if t.strip()],
+    )
+    loop = await loop_service.create_loop(db, file, data, admin.id)
+    from app.tasks.download_tasks import generate_waveform_task
+    generate_waveform_task.delay(str(loop.id))
+    return success(LoopResponse.model_validate(loop).model_dump(), "Loop uploaded")
+
+
+@router.put("/loops/{loop_id}")
+async def update_loop(
+    loop_id: uuid.UUID,
+    body: LoopUpdate,
+    db: AsyncSession = Depends(get_db),
+    admin=Depends(require_admin),
+):
+    loop = await loop_service.update_loop(db, loop_id, body)
+    return success(LoopResponse.model_validate(loop).model_dump(), "Loop updated")
+
+
+@router.delete("/loops/{loop_id}")
+async def delete_loop(
+    loop_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    admin=Depends(require_admin),
+):
+    await loop_service.delete_loop(db, loop_id)
+    return success(message="Loop deleted")
+
+
+@router.post("/stem-packs")
+async def create_stem_pack(
+    body: StemPackCreate,
+    db: AsyncSession = Depends(get_db),
+    admin=Depends(require_admin),
+):
+    pack = await stem_pack_service.create_stem_pack(db, body, admin.id)
+    return success(StemPackResponse.model_validate(pack).model_dump(), "StemPack created")
+
+
+@router.post("/stem-packs/{pack_id}/stems")
+async def add_stem(
+    pack_id: uuid.UUID,
+    file: UploadFile = File(...),
+    label: str = Form(...),
+    duration: int = Form(...),
+    db: AsyncSession = Depends(get_db),
+    admin=Depends(require_admin),
+):
+    data = StemCreate(label=label, duration=duration)
+    stem = await stem_pack_service.add_stem_to_pack(db, pack_id, file, data)
+    return success(StemResponse.model_validate(stem).model_dump(), "Stem added")
+
+
+@router.put("/stem-packs/{pack_id}")
+async def update_stem_pack(
+    pack_id: uuid.UUID,
+    body: StemPackCreate,
+    db: AsyncSession = Depends(get_db),
+    admin=Depends(require_admin),
+):
+    from app.exceptions import NotFoundError
+    from app.models.stem_pack import StemPack
+    pack = await db.get(StemPack, pack_id)
+    if not pack:
+        raise NotFoundError("StemPack not found")
+    for field, value in body.model_dump(exclude_none=True).items():
+        setattr(pack, field, value)
+    await db.commit()
+    await db.refresh(pack)
+    return success(StemPackResponse.model_validate(pack).model_dump(), "StemPack updated")
+
+
+@router.delete("/stem-packs/{pack_id}")
+async def delete_stem_pack(
+    pack_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    admin=Depends(require_admin),
+):
+    from app.models.stem_pack import StemPack, Stem
+    from sqlalchemy import select
+    from app.services import s3_service
+    pack = await db.get(StemPack, pack_id)
+    stems = await db.scalars(select(Stem).where(Stem.stem_pack_id == pack_id))
+    for stem in stems.all():
+        if stem.file_s3_key:
+            await s3_service.delete_object(stem.file_s3_key)
+        await db.delete(stem)
+    await db.delete(pack)
+    await db.commit()
+    return success(message="StemPack deleted")
