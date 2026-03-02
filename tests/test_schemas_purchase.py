@@ -17,11 +17,22 @@ def test_checkout_rejects_both_products():
 def test_checkout_accepts_loop_only():
     req = CheckoutRequest(loop_id=uuid.uuid4())
     assert req.stem_pack_id is None
+    assert req.provider == "flutterwave"
 
 
 def test_checkout_accepts_stem_pack_only():
     req = CheckoutRequest(stem_pack_id=uuid.uuid4())
     assert req.loop_id is None
+
+
+def test_checkout_accepts_paystack_provider():
+    req = CheckoutRequest(loop_id=uuid.uuid4(), provider="paystack")
+    assert req.provider == "paystack"
+
+
+def test_checkout_rejects_invalid_provider():
+    with pytest.raises(ValidationError):
+        CheckoutRequest(loop_id=uuid.uuid4(), provider="stripe")
 
 
 # append at end of file

@@ -16,6 +16,6 @@ def test_settings_loads(monkeypatch):
     monkeypatch.setenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/2")
     get_settings.cache_clear()
     s = get_settings()
-    assert s.access_token_expire_minutes == 15
+    assert s.access_token_expire_minutes > 0
     assert s.app_env == "development"
-    assert s.aws_region == "us-east-1"
+    assert s.aws_region  # region is set

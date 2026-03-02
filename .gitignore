@@ -36,6 +36,7 @@ Thumbs.db
 # Alembic
 alembic/versions/*.pyc
 
+.env
 .env.local
 .env.*.local
 .env.production
