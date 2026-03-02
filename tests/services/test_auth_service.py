@@ -14,10 +14,10 @@ async def test_password_hash_and_verify():
 
 
 def test_access_token_encodes_user_info():
-    token = create_access_token("user-123", "free")
+    token = create_access_token("user-123", "user")
     payload = decode_access_token(token)
     assert payload["sub"] == "user-123"
-    assert payload["role"] == "free"
+    assert payload["role"] == "user"
 
 
 def test_invalid_token_raises():

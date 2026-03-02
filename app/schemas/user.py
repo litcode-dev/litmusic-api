@@ -41,3 +41,8 @@ class TokenResponse(BaseModel):
 
 class RefreshRequest(BaseModel):
     refresh_token: str
+
+
+class OAuthCallbackRequest(BaseModel):
+    code: str
+    state: str | None = None

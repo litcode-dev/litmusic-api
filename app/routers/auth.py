@@ -1,3 +1,4 @@
+import secrets
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from redis.asyncio import Redis
@@ -5,7 +6,11 @@ from app.database import get_db
 from app.middleware.auth_middleware import get_current_user, get_redis
 from app.middleware.rate_limit import limiter
 from app.services import auth_service
-from app.schemas.user import UserRegister, UserLogin, UserResponse, TokenResponse, RefreshRequest
+from app.services import oauth_service
+from app.schemas.user import (
+    UserRegister, UserLogin, UserResponse, TokenResponse,
+    RefreshRequest, OAuthCallbackRequest,
+)
 from app.schemas.common import success
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -66,3 +71,36 @@ async def logout(
 @router.get("/me")
 async def me(user=Depends(get_current_user)):
     return success(UserResponse.model_validate(user).model_dump())
+
+
+@router.get("/oauth/google")
+async def google_oauth_redirect():
+    """Return the Google authorization URL for the client to redirect to."""
+    state = secrets.token_urlsafe(16)
+    url = oauth_service.get_google_auth_url(state)
+    return success({"authorization_url": url, "state": state})
+
+
+@router.post("/oauth/google/callback")
+async def google_oauth_callback(
+    body: OAuthCallbackRequest,
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+):
+    """Exchange a Google authorization code for LitMusic JWT tokens."""
+    token_data = await oauth_service.exchange_google_code(body.code)
+    user_info = await oauth_service.get_google_user_info(token_data["access_token"])
+    user = await auth_service.find_or_create_oauth_user(
+        db,
+        email=user_info["email"],
+        full_name=user_info.get("name", ""),
+        provider="google",
+        provider_id=user_info["sub"],
+    )
+    access_token = auth_service.create_access_token(str(user.id), user.role.value)
+    refresh_token = auth_service.create_refresh_token()
+    await auth_service.store_refresh_token(redis, refresh_token, str(user.id))
+    return success(
+        TokenResponse(access_token=access_token, refresh_token=refresh_token).model_dump(),
+        "OAuth login successful",
+    )

@@ -74,7 +74,7 @@ async def register_user(db: AsyncSession, email: str, password: str, full_name: 
         email=email,
         password_hash=await hash_password(password),
         full_name=full_name,
-        role=UserRole.free,
+        role=UserRole.user,
     )
     db.add(user)
     await db.commit()
@@ -84,8 +84,49 @@ async def register_user(db: AsyncSession, email: str, password: str, full_name: 
 
 async def authenticate_user(db: AsyncSession, email: str, password: str) -> User:
     user = await db.scalar(select(User).where(User.email == email))
-    if not user or not await verify_password(password, user.password_hash):
+    if not user or not user.password_hash or not await verify_password(password, user.password_hash):
         raise UnauthorizedError("Invalid credentials")
+    return user
+
+
+async def find_or_create_oauth_user(
+    db: AsyncSession,
+    email: str,
+    full_name: str,
+    provider: str,
+    provider_id: str,
+) -> User:
+    # First: find by provider + provider_id
+    user = await db.scalar(
+        select(User).where(
+            User.oauth_provider == provider,
+            User.oauth_provider_id == provider_id,
+        )
+    )
+    if user:
+        return user
+
+    # Second: find by email and link the OAuth account
+    user = await db.scalar(select(User).where(User.email == email))
+    if user:
+        user.oauth_provider = provider
+        user.oauth_provider_id = provider_id
+        await db.commit()
+        await db.refresh(user)
+        return user
+
+    # Third: create new OAuth-only user
+    user = User(
+        email=email,
+        full_name=full_name,
+        password_hash=None,
+        role=UserRole.user,
+        oauth_provider=provider,
+        oauth_provider_id=provider_id,
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
     return user
 
 

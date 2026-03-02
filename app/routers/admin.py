@@ -1,17 +1,23 @@
 from fastapi import APIRouter, Depends, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
 from decimal import Decimal
 from app.database import get_db
-from app.middleware.auth_middleware import require_admin
+from app.middleware.auth_middleware import require_admin, require_producer
 from app.services import loop_service, stem_pack_service
 from app.schemas.loop import LoopCreate, LoopUpdate, LoopResponse
 from app.schemas.stem_pack import StemPackCreate, StemCreate, StemPackResponse, StemResponse
+from app.schemas.user import UserResponse
 from app.schemas.common import success
 from app.models.loop import Genre, TempoFeel
+from app.models.user import User, UserRole
+from app.exceptions import NotFoundError
 import uuid
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
+
+# --- Loop endpoints ---
 
 @router.post("/loops")
 async def upload_loop(
@@ -25,14 +31,14 @@ async def upload_loop(
     is_free: bool = Form(False),
     tags: str = Form(""),  # comma-separated
     db: AsyncSession = Depends(get_db),
-    admin=Depends(require_admin),
+    producer=Depends(require_producer),
 ):
     data = LoopCreate(
         title=title, genre=genre, bpm=bpm, key=key,
         tempo_feel=tempo_feel, price=price, is_free=is_free,
         tags=[t.strip() for t in tags.split(",") if t.strip()],
     )
-    loop = await loop_service.create_loop(db, file, data, admin.id)
+    loop = await loop_service.create_loop(db, file, data, producer.id)
     from app.tasks.download_tasks import generate_waveform_task
     generate_waveform_task.delay(str(loop.id))
     return success(LoopResponse.model_validate(loop).model_dump(), "Loop uploaded")
@@ -59,13 +65,15 @@ async def delete_loop(
     return success(message="Loop deleted")
 
 
+# --- StemPack endpoints ---
+
 @router.post("/stem-packs")
 async def create_stem_pack(
     body: StemPackCreate,
     db: AsyncSession = Depends(get_db),
-    admin=Depends(require_admin),
+    producer=Depends(require_producer),
 ):
-    pack = await stem_pack_service.create_stem_pack(db, body, admin.id)
+    pack = await stem_pack_service.create_stem_pack(db, body, producer.id)
     return success(StemPackResponse.model_validate(pack).model_dump(), "StemPack created")
 
 
@@ -76,7 +84,7 @@ async def add_stem(
     label: str = Form(...),
     duration: int = Form(...),
     db: AsyncSession = Depends(get_db),
-    admin=Depends(require_admin),
+    producer=Depends(require_producer),
 ):
     data = StemCreate(label=label, duration=duration)
     stem = await stem_pack_service.add_stem_to_pack(db, pack_id, file, data)
@@ -90,7 +98,6 @@ async def update_stem_pack(
     db: AsyncSession = Depends(get_db),
     admin=Depends(require_admin),
 ):
-    from app.exceptions import NotFoundError
     from app.models.stem_pack import StemPack
     pack = await db.get(StemPack, pack_id)
     if not pack:
@@ -109,11 +116,9 @@ async def delete_stem_pack(
     admin=Depends(require_admin),
 ):
     from app.models.stem_pack import StemPack, Stem
-    from sqlalchemy import select
     from app.services import s3_service
     pack = await db.get(StemPack, pack_id)
     if not pack:
-        from app.exceptions import NotFoundError
         raise NotFoundError("StemPack not found")
     stems = await db.scalars(select(Stem).where(Stem.stem_pack_id == pack_id))
     for stem in stems.all():
@@ -123,3 +128,39 @@ async def delete_stem_pack(
     await db.delete(pack)
     await db.commit()
     return success(message="StemPack deleted")
+
+
+# --- User management endpoints (admin only) ---
+
+@router.get("/users")
+async def list_users(
+    page: int = 1,
+    page_size: int = 20,
+    db: AsyncSession = Depends(get_db),
+    admin=Depends(require_admin),
+):
+    offset = (page - 1) * page_size
+    total = await db.scalar(select(func.count()).select_from(User))
+    users = await db.scalars(select(User).offset(offset).limit(page_size))
+    return success({
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "items": [UserResponse.model_validate(u).model_dump() for u in users.all()],
+    })
+
+
+@router.put("/users/{user_id}/role")
+async def change_user_role(
+    user_id: uuid.UUID,
+    role: UserRole,
+    db: AsyncSession = Depends(get_db),
+    admin=Depends(require_admin),
+):
+    user = await db.get(User, user_id)
+    if not user:
+        raise NotFoundError("User not found")
+    user.role = role
+    await db.commit()
+    await db.refresh(user)
+    return success(UserResponse.model_validate(user).model_dump(), "Role updated")

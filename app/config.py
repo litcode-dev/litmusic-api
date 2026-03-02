@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     celery_broker_url: str
     celery_result_backend: str
 
+    # Google OAuth
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = "http://localhost:3000/auth/google/callback"
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -34,3 +34,9 @@ async def require_admin(user: User = Depends(get_current_user)) -> User:
     if user.role != UserRole.admin:
         raise ForbiddenError("Admin access required")
     return user
+
+
+async def require_producer(user: User = Depends(get_current_user)) -> User:
+    if user.role not in (UserRole.producer, UserRole.admin):
+        raise ForbiddenError("Producer or admin access required")
+    return user
