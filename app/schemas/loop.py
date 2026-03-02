@@ -34,6 +34,13 @@ class LoopUpdate(BaseModel):
     price: Decimal | None = None
     is_free: bool | None = None
 
+    @field_validator("bpm")
+    @classmethod
+    def bpm_range(cls, v: int | None) -> int | None:
+        if v is not None and not (60 <= v <= 140):
+            raise ValueError("BPM must be between 60 and 140")
+        return v
+
 
 class LoopResponse(BaseModel):
     id: uuid.UUID

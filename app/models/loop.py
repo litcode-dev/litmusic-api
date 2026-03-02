@@ -50,7 +50,7 @@ class Loop(Base):
     preview_s3_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     aes_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     aes_iv: Mapped[str | None] = mapped_column(Text, nullable=True)
-    waveform_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    waveform_data: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     download_count: Mapped[int] = mapped_column(Integer, default=0)
     play_count: Mapped[int] = mapped_column(Integer, default=0)
     created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
