@@ -27,6 +27,7 @@ class UserResponse(BaseModel):
     email: str
     full_name: str
     role: UserRole
+    avatar_url: str | None = None
     stripe_customer_id: str | None
     created_at: datetime
 
@@ -46,3 +47,7 @@ class RefreshRequest(BaseModel):
 class OAuthCallbackRequest(BaseModel):
     code: str
     state: str | None = None
+
+
+class GoogleTokenRequest(BaseModel):
+    access_token: str

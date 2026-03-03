@@ -9,7 +9,7 @@ from app.services import auth_service
 from app.services import oauth_service
 from app.schemas.user import (
     UserRegister, UserLogin, UserResponse, TokenResponse,
-    RefreshRequest, OAuthCallbackRequest,
+    RefreshRequest, OAuthCallbackRequest, GoogleTokenRequest,
 )
 from app.schemas.common import success
 
@@ -90,6 +90,31 @@ async def google_oauth_redirect():
     return response
 
 
+@router.post("/oauth/google/token")
+async def google_oauth_mobile(
+    body: GoogleTokenRequest,
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+):
+    """Exchange a Google access_token (from mobile SDK) for LitMusic JWT tokens."""
+    user_info = await oauth_service.get_google_user_info(body.access_token)
+    user = await auth_service.find_or_create_oauth_user(
+        db,
+        email=user_info["email"],
+        full_name=user_info.get("name", ""),
+        provider="google",
+        provider_id=user_info["sub"],
+        avatar_url=user_info.get("picture"),
+    )
+    access_token = auth_service.create_access_token(str(user.id), user.role.value)
+    refresh_token = auth_service.create_refresh_token()
+    await auth_service.store_refresh_token(redis, refresh_token, str(user.id))
+    return success(
+        TokenResponse(access_token=access_token, refresh_token=refresh_token).model_dump(),
+        "OAuth login successful",
+    )
+
+
 @router.post("/oauth/google/callback")
 async def google_oauth_callback(
     body: OAuthCallbackRequest,
@@ -105,6 +130,7 @@ async def google_oauth_callback(
         full_name=user_info.get("name", ""),
         provider="google",
         provider_id=user_info["sub"],
+        avatar_url=user_info.get("picture"),
     )
     access_token = auth_service.create_access_token(str(user.id), user.role.value)
     refresh_token = auth_service.create_refresh_token()

@@ -95,6 +95,7 @@ async def find_or_create_oauth_user(
     full_name: str,
     provider: str,
     provider_id: str,
+    avatar_url: str | None = None,
 ) -> User:
     # First: find by provider + provider_id
     user = await db.scalar(
@@ -104,6 +105,10 @@ async def find_or_create_oauth_user(
         )
     )
     if user:
+        if avatar_url and user.avatar_url != avatar_url:
+            user.avatar_url = avatar_url
+            await db.commit()
+            await db.refresh(user)
         return user
 
     # Second: find by email and link the OAuth account
@@ -111,6 +116,8 @@ async def find_or_create_oauth_user(
     if user:
         user.oauth_provider = provider
         user.oauth_provider_id = provider_id
+        if avatar_url:
+            user.avatar_url = avatar_url
         await db.commit()
         await db.refresh(user)
         return user
@@ -121,6 +128,7 @@ async def find_or_create_oauth_user(
         full_name=full_name,
         password_hash=None,
         role=UserRole.user,
+        avatar_url=avatar_url,
         oauth_provider=provider,
         oauth_provider_id=provider_id,
     )
