@@ -39,6 +39,14 @@ async def seed():
                 full_name="Test Producer",
                 role=UserRole.producer,
             ))
+        if "user@litmusic.app" not in existing_emails:
+            users_to_add.append(User(
+                id=uuid.uuid4(),
+                email="user@litmusic.app",
+                password_hash=await hash_password("user1234"),
+                full_name="Test User",
+                role=UserRole.user,
+            ))
 
         if users_to_add:
             db.add_all(users_to_add)
@@ -73,6 +81,7 @@ async def seed():
         print("Seed complete.")
         print("  Admin:    admin@litmusic.app / admin1234")
         print("  Producer: producer@litmusic.app / producer1234")
+        print("  User:     user@litmusic.app / user1234")
 
 
 if __name__ == "__main__":

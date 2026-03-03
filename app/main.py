@@ -8,7 +8,7 @@ from app.config import get_settings
 from app.exceptions import AppError, app_error_handler
 from app.middleware.logging_middleware import LoggingMiddleware
 from app.middleware.rate_limit import limiter
-from app.routers import auth, loops, stem_packs, payments, admin
+from app.routers import auth, loops, stem_packs, payments, admin, downloads, likes
 
 structlog.configure(
     processors=[
@@ -60,6 +60,8 @@ app.include_router(loops.router, prefix=PREFIX)
 app.include_router(stem_packs.router, prefix=PREFIX)
 app.include_router(payments.router, prefix=PREFIX)
 app.include_router(admin.router, prefix=PREFIX)
+app.include_router(downloads.router, prefix=PREFIX)
+app.include_router(likes.router, prefix=PREFIX)
 
 
 @app.get("/health", tags=["health"])

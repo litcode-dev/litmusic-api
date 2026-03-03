@@ -38,6 +38,9 @@ class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
+    full_name: str
+    role: UserRole
+    avatar_url: str | None = None
 
 
 class RefreshRequest(BaseModel):

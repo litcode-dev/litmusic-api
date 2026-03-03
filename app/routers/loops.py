@@ -5,7 +5,7 @@ import httpx
 from app.database import get_db
 from app.middleware.auth_middleware import get_current_user
 from app.middleware.rate_limit import limiter
-from app.services import loop_service, s3_service
+from app.services import loop_service, s3_service, like_service
 from app.schemas.loop import LoopFilter, LoopResponse
 from app.schemas.common import success
 from app.models.loop import Genre, TempoFeel
@@ -96,3 +96,23 @@ async def download_loop(
         "aes_iv": loop.aes_iv,
         "expires_in_seconds": 900,
     })
+
+
+@router.post("/{loop_id}/like")
+async def like_loop(
+    loop_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    await like_service.like_loop(db, user.id, loop_id)
+    return success(message="Loop liked")
+
+
+@router.delete("/{loop_id}/like")
+async def unlike_loop(
+    loop_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    await like_service.unlike_loop(db, user.id, loop_id)
+    return success(message="Loop unliked")

@@ -36,7 +36,13 @@ async def login(
     refresh_token = auth_service.create_refresh_token()
     await auth_service.store_refresh_token(redis, refresh_token, str(user.id))
     return success(
-        TokenResponse(access_token=access_token, refresh_token=refresh_token).model_dump(),
+        TokenResponse(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            full_name=user.full_name,
+            role=user.role,
+            avatar_url=user.avatar_url,
+        ).model_dump(),
         "Login successful",
     )
 
@@ -110,7 +116,13 @@ async def google_oauth_mobile(
     refresh_token = auth_service.create_refresh_token()
     await auth_service.store_refresh_token(redis, refresh_token, str(user.id))
     return success(
-        TokenResponse(access_token=access_token, refresh_token=refresh_token).model_dump(),
+        TokenResponse(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            full_name=user.full_name,
+            role=user.role,
+            avatar_url=user.avatar_url,
+        ).model_dump(),
         "OAuth login successful",
     )
 
@@ -136,6 +148,12 @@ async def google_oauth_callback(
     refresh_token = auth_service.create_refresh_token()
     await auth_service.store_refresh_token(redis, refresh_token, str(user.id))
     return success(
-        TokenResponse(access_token=access_token, refresh_token=refresh_token).model_dump(),
+        TokenResponse(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            full_name=user.full_name,
+            role=user.role,
+            avatar_url=user.avatar_url,
+        ).model_dump(),
         "OAuth login successful",
     )

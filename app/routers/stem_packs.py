@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database import get_db
 from app.middleware.auth_middleware import get_current_user
-from app.services import stem_pack_service, s3_service
+from app.services import stem_pack_service, s3_service, like_service
 from app.models.stem_pack import Stem
 from app.schemas.stem_pack import StemPackResponse
 from app.schemas.common import success
@@ -72,3 +72,23 @@ async def download_stem_pack(
 
     await db.commit()
     return success({"stems": download_links})
+
+
+@router.post("/{pack_id}/like")
+async def like_stem_pack(
+    pack_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    await like_service.like_stem_pack(db, user.id, pack_id)
+    return success(message="Stem pack liked")
+
+
+@router.delete("/{pack_id}/like")
+async def unlike_stem_pack(
+    pack_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    await like_service.unlike_stem_pack(db, user.id, pack_id)
+    return success(message="Stem pack unliked")

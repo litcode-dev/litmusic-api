@@ -7,6 +7,7 @@ from app.models.loop import Genre, TempoFeel
 
 class LoopCreate(BaseModel):
     title: str
+    description: str | None = None
     genre: Genre
     bpm: int
     key: str
@@ -25,6 +26,7 @@ class LoopCreate(BaseModel):
 
 class LoopUpdate(BaseModel):
     title: str | None = None
+    description: str | None = None
     genre: Genre | None = None
     bpm: int | None = None
     key: str | None = None
@@ -50,6 +52,7 @@ class LoopResponse(BaseModel):
     key: str
     duration: int
     tempo_feel: TempoFeel
+    description: str | None = None
     tags: list[str]
     price: Decimal
     is_free: bool

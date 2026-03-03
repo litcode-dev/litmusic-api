@@ -25,7 +25,26 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection):
-    context.configure(connection=connection, target_metadata=target_metadata)
+    def on_version_apply(ctx, step, heads, run_args):
+        direction = "upgrade" if step.is_upgrade else "downgrade"
+        revision = step.up_revision if step.is_upgrade else (step.down_revision or "base")
+        description = getattr(step, "doc", None) or revision
+        try:
+            connection.execute(
+                __import__("sqlalchemy").text(
+                    "INSERT INTO migration_log (revision, description, direction) "
+                    "VALUES (:rev, :desc, :dir)"
+                ),
+                {"rev": revision, "desc": description, "dir": direction},
+            )
+        except Exception:
+            pass  # table may not exist yet on very first run
+
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        on_version_apply=on_version_apply,
+    )
     with context.begin_transaction():
         context.run_migrations()
 
