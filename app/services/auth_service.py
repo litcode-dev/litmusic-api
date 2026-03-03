@@ -79,6 +79,8 @@ async def register_user(db: AsyncSession, email: str, password: str, full_name: 
     db.add(user)
     await db.commit()
     await db.refresh(user)
+    from app.tasks.notification_tasks import send_registration_email
+    send_registration_email.delay(str(user.id))
     return user
 
 
@@ -135,6 +137,8 @@ async def find_or_create_oauth_user(
     db.add(user)
     await db.commit()
     await db.refresh(user)
+    from app.tasks.notification_tasks import send_registration_email
+    send_registration_email.delay(str(user.id))
     return user
 
 

@@ -35,6 +35,13 @@ class Settings(BaseSettings):
     # Frontend
     frontend_url: str = "https://litmusic.app"
 
+    # Email (SMTP)
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = "noreply@litmusic.app"
+
     # OneSignal
     onesignal_app_id: str
     onesignal_api_key: str
