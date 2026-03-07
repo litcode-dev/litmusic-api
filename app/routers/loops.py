@@ -16,6 +16,7 @@ router = APIRouter(prefix="/loops", tags=["loops"])
 
 @router.get("")
 async def list_loops(
+    search: str | None = None,
     genre: Genre | None = None,
     bpm_min: int | None = None,
     bpm_max: int | None = None,
@@ -28,7 +29,7 @@ async def list_loops(
     db: AsyncSession = Depends(get_db),
 ):
     filters = LoopFilter(
-        genre=genre, bpm_min=bpm_min, bpm_max=bpm_max,
+        search=search, genre=genre, bpm_min=bpm_min, bpm_max=bpm_max,
         key=key, tempo_feel=tempo_feel, is_free=is_free,
         sort=sort, page=page, page_size=page_size,
     )

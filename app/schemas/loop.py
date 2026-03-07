@@ -80,6 +80,7 @@ class LoopResponse(BaseModel):
 
 
 class LoopFilter(BaseModel):
+    search: str | None = None
     genre: Genre | None = None
     bpm_min: int | None = None
     bpm_max: int | None = None
