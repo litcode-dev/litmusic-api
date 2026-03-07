@@ -34,3 +34,25 @@ def generate_preview_mp3(wav_bytes: bytes, duration_seconds: int = 15) -> bytes:
             os.unlink(tmp_in_path)
         if os.path.exists(tmp_out_path):
             os.unlink(tmp_out_path)
+
+
+def convert_mp3_to_wav(mp3_bytes: bytes) -> bytes:
+    """Convert MP3 bytes to WAV bytes using ffmpeg. Used for Suno-generated audio."""
+    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp_in:
+        tmp_in.write(mp3_bytes)
+        tmp_in_path = tmp_in.name
+
+    tmp_out_path = str(Path(tmp_in_path).with_suffix("")) + "_converted.wav"
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", tmp_in_path, "-ar", "44100", "-ac", "2", tmp_out_path],
+            check=True,
+            capture_output=True,
+        )
+        with open(tmp_out_path, "rb") as f:
+            return f.read()
+    finally:
+        if os.path.exists(tmp_in_path):
+            os.unlink(tmp_in_path)
+        if os.path.exists(tmp_out_path):
+            os.unlink(tmp_out_path)
