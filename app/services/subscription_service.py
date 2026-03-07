@@ -7,6 +7,7 @@ from sqlalchemy import select
 from app.models.subscription import Subscription, SubscriptionPlan, SubscriptionStatus
 from app.models.purchase import PaymentProvider
 from app.models.user import User
+from app.config import get_settings
 from app.exceptions import AppError
 from app.services import flutterwave_service, paystack_service
 
@@ -125,7 +126,6 @@ async def handle_flutterwave_webhook(
             db, user_id, tx_ref, amount, PaymentProvider.flutterwave
         )
     elif payment_type == "ai_extras":
-        from app.config import get_settings
         quantity = meta.get("quantity", get_settings().ai_extra_credits_quantity)
         await _process_extras_webhook(db, user_id, int(quantity))
 
@@ -162,6 +162,5 @@ async def handle_paystack_webhook(
             db, user_id, reference, amount, PaymentProvider.paystack
         )
     elif payment_type == "ai_extras":
-        from app.config import get_settings
         quantity = meta.get("quantity", get_settings().ai_extra_credits_quantity)
         await _process_extras_webhook(db, user_id, int(quantity))
