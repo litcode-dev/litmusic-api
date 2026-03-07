@@ -165,3 +165,47 @@ async def change_user_role(
     await db.commit()
     await db.refresh(user)
     return success(UserResponse.model_validate(user).model_dump(), "Role updated")
+
+
+# --- AI administration ---
+
+@router.put("/users/{user_id}/ai-enabled")
+async def toggle_user_ai(
+    user_id: uuid.UUID,
+    enabled: bool,
+    db: AsyncSession = Depends(get_db),
+    admin=Depends(require_admin),
+):
+    user = await db.get(User, user_id)
+    if not user:
+        raise NotFoundError("User not found")
+    user.ai_enabled = enabled
+    await db.commit()
+    return success(
+        {"ai_enabled": user.ai_enabled},
+        f"AI {'enabled' if enabled else 'disabled'} for user",
+    )
+
+
+@router.get("/ai/generations")
+async def list_all_generations(
+    page: int = 1,
+    page_size: int = 20,
+    db: AsyncSession = Depends(get_db),
+    admin=Depends(require_admin),
+):
+    from app.models.ai_generation import AIGeneration
+    from app.schemas.ai_generation import AIGenerationResponse
+    offset = (page - 1) * page_size
+    total = await db.scalar(select(func.count()).select_from(AIGeneration))
+    gens = await db.scalars(
+        select(AIGeneration)
+        .order_by(AIGeneration.created_at.desc())
+        .offset(offset).limit(page_size)
+    )
+    return success({
+        "items": [AIGenerationResponse.model_validate(g).model_dump() for g in gens.all()],
+        "total": total or 0,
+        "page": page,
+        "page_size": page_size,
+    })

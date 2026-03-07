@@ -114,3 +114,23 @@ async def test_generate_uses_extra_credits_when_quota_full(client, db_session, m
     assert resp.json()["data"]["is_extra"] is True
     await db_session.refresh(user)
     assert user.ai_extra_credits == 1
+
+
+@pytest.mark.asyncio
+async def test_admin_can_disable_user_ai(client, db_session):
+    admin_user = await _create_user(db_session)
+    admin_user.role = UserRole.admin
+    await db_session.commit()
+
+    target = await _create_user(db_session)
+    assert target.ai_enabled is True
+
+    resp = await client.put(
+        f"/api/v1/admin/users/{target.id}/ai-enabled",
+        params={"enabled": "false"},
+        headers=_auth_headers(admin_user),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["data"]["ai_enabled"] is False
+    await db_session.refresh(target)
+    assert target.ai_enabled is False
