@@ -1,10 +1,12 @@
+import enum
 import uuid
 from datetime import datetime
+
 from sqlalchemy import Boolean, Integer, String, DateTime, Enum as SAEnum, func
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID
+
 from app.database import Base
-import enum
 
 
 class UserRole(str, enum.Enum):
@@ -23,7 +25,6 @@ class User(Base):
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[UserRole] = mapped_column(SAEnum(UserRole), default=UserRole.user, nullable=False)
-    stripe_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     onesignal_player_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     oauth_provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
