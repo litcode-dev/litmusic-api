@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, DateTime, Enum as SAEnum, func
+from sqlalchemy import Boolean, Integer, String, DateTime, Enum as SAEnum, func
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID
 from app.database import Base
@@ -34,3 +34,5 @@ class User(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    ai_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    ai_extra_credits: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
