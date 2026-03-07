@@ -9,7 +9,6 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = "h7i69d48e5f1"
@@ -29,93 +28,72 @@ def upgrade() -> None:
         sa.Column("ai_extra_credits", sa.Integer(), nullable=False, server_default=sa.text("0")),
     )
 
-    # --- enums ---
-    subscriptionplan = postgresql.ENUM(
-        "premium", name="subscriptionplan", create_type=False
-    )
-    subscriptionstatus = postgresql.ENUM(
-        "active", "cancelled", "expired", name="subscriptionstatus", create_type=False
-    )
-    aiprovider = postgresql.ENUM(
-        "suno", "self_hosted", name="aiprovider", create_type=False
-    )
-    aigenerationstatus = postgresql.ENUM(
-        "pending", "processing", "completed", "failed", name="aigenerationstatus", create_type=False
-    )
+    # --- enums (raw SQL to avoid SQLAlchemy asyncpg create_type issues) ---
+    op.execute(sa.text("""
+        DO $$ BEGIN
+            CREATE TYPE subscriptionplan AS ENUM ('premium');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$
+    """))
+    op.execute(sa.text("""
+        DO $$ BEGIN
+            CREATE TYPE subscriptionstatus AS ENUM ('active', 'cancelled', 'expired');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$
+    """))
+    op.execute(sa.text("""
+        DO $$ BEGIN
+            CREATE TYPE aiprovider AS ENUM ('suno', 'self_hosted');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$
+    """))
+    op.execute(sa.text("""
+        DO $$ BEGIN
+            CREATE TYPE aigenerationstatus AS ENUM ('pending', 'processing', 'completed', 'failed');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$
+    """))
 
-    subscriptionplan.create(op.get_bind(), checkfirst=True)
-    subscriptionstatus.create(op.get_bind(), checkfirst=True)
-    aiprovider.create(op.get_bind(), checkfirst=True)
-    aigenerationstatus.create(op.get_bind(), checkfirst=True)
-
-    # --- subscriptions table ---
-    op.create_table(
-        "subscriptions",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=False),
-        sa.Column("plan", sa.Enum("premium", name="subscriptionplan"), nullable=False),
-        sa.Column(
-            "status",
-            sa.Enum("active", "cancelled", "expired", name="subscriptionstatus"),
-            nullable=False,
-            server_default=sa.text("'active'"),
-        ),
-        sa.Column(
-            "provider",
-            sa.Enum("flutterwave", "paystack", name="paymentprovider"),
-            nullable=False,
-        ),
-        sa.Column("payment_reference", sa.String(255), nullable=False, unique=True),
-        sa.Column("amount_paid", sa.Numeric(10, 2), nullable=False),
-        sa.Column("ai_quota", sa.Integer(), nullable=False, server_default=sa.text("10")),
-        sa.Column("ai_quota_used", sa.Integer(), nullable=False, server_default=sa.text("0")),
-        sa.Column("billing_period_start", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.func.now(),
-            nullable=False,
-        ),
-    )
-    op.create_index("ix_subscriptions_user_id", "subscriptions", ["user_id"])
+    # --- subscriptions table (raw SQL to avoid SQLAlchemy re-creating existing enums) ---
+    op.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS subscriptions (
+            id          UUID PRIMARY KEY,
+            user_id     UUID NOT NULL REFERENCES users(id),
+            plan        subscriptionplan NOT NULL,
+            status      subscriptionstatus NOT NULL DEFAULT 'active',
+            provider    paymentprovider NOT NULL,
+            payment_reference VARCHAR(255) NOT NULL UNIQUE,
+            amount_paid NUMERIC(10, 2) NOT NULL,
+            ai_quota    INTEGER NOT NULL DEFAULT 10,
+            ai_quota_used INTEGER NOT NULL DEFAULT 0,
+            billing_period_start TIMESTAMPTZ NOT NULL,
+            expires_at  TIMESTAMPTZ NOT NULL,
+            created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+    """))
+    op.execute(sa.text(
+        "CREATE INDEX IF NOT EXISTS ix_subscriptions_user_id ON subscriptions (user_id)"
+    ))
 
     # --- ai_generations table ---
-    op.create_table(
-        "ai_generations",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=False),
-        sa.Column(
-            "subscription_id",
-            postgresql.UUID(as_uuid=True),
-            sa.ForeignKey("subscriptions.id"),
-            nullable=True,
-        ),
-        sa.Column("provider", sa.Enum("suno", "self_hosted", name="aiprovider"), nullable=False),
-        sa.Column("prompt", sa.Text(), nullable=False),
-        sa.Column("style_prompt", sa.Text(), nullable=True),
-        sa.Column(
-            "status",
-            sa.Enum("pending", "processing", "completed", "failed", name="aigenerationstatus"),
-            nullable=False,
-            server_default=sa.text("'pending'"),
-        ),
-        sa.Column(
-            "result_loop_id",
-            postgresql.UUID(as_uuid=True),
-            sa.ForeignKey("loops.id"),
-            nullable=True,
-        ),
-        sa.Column("is_extra", sa.Boolean(), nullable=False, server_default=sa.text("false")),
-        sa.Column("error_message", sa.Text(), nullable=True),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.func.now(),
-            nullable=False,
-        ),
-    )
-    op.create_index("ix_ai_generations_user_id", "ai_generations", ["user_id"])
+    op.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS ai_generations (
+            id              UUID PRIMARY KEY,
+            user_id         UUID NOT NULL REFERENCES users(id),
+            subscription_id UUID REFERENCES subscriptions(id),
+            provider        aiprovider NOT NULL,
+            prompt          TEXT NOT NULL,
+            style_prompt    TEXT,
+            status          aigenerationstatus NOT NULL DEFAULT 'pending',
+            result_loop_id  UUID REFERENCES loops(id),
+            is_extra        BOOLEAN NOT NULL DEFAULT false,
+            error_message   TEXT,
+            created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+    """))
+    op.execute(sa.text(
+        "CREATE INDEX IF NOT EXISTS ix_ai_generations_user_id ON ai_generations (user_id)"
+    ))
 
 
 def downgrade() -> None:
