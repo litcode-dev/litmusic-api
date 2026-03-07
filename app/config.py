@@ -59,6 +59,17 @@ class Settings(BaseSettings):
     google_client_secret: str = ""
     google_redirect_uri: str = "http://localhost:3000/auth/google/callback"
 
+    # AI Music Generation
+    suno_api_key: str = ""
+    suno_api_url: str = "https://api.suno.ai"
+    ai_selfhosted_url: str = ""
+    ai_selfhosted_api_key: str = ""
+
+    # Subscription pricing (amounts in kobo for Paystack; divide by 100 for Flutterwave major units)
+    subscription_monthly_price: int = 200000   # ₦2,000 in kobo
+    ai_extra_credits_price: int = 50000        # ₦500 in kobo
+    ai_extra_credits_quantity: int = 5         # slots per extra purchase
+
 
 @lru_cache
 def get_settings() -> Settings:
