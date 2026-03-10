@@ -8,7 +8,7 @@ from app.config import get_settings
 from app.exceptions import AppError, app_error_handler
 from app.middleware.logging_middleware import LoggingMiddleware
 from app.middleware.rate_limit import limiter
-from app.routers import auth, loops, stem_packs, payments, admin, downloads, likes, subscriptions, ai
+from app.routers import auth, loops, stem_packs, payments, admin, downloads, likes, subscriptions, ai, drones
 
 structlog.configure(
     processors=[
@@ -64,6 +64,7 @@ app.include_router(downloads.router, prefix=PREFIX)
 app.include_router(likes.router, prefix=PREFIX)
 app.include_router(subscriptions.router, prefix=PREFIX)
 app.include_router(ai.router, prefix=PREFIX)
+app.include_router(drones.router, prefix=PREFIX)
 
 
 @app.get("/health", tags=["health"])

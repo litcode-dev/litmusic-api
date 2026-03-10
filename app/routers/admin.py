@@ -4,12 +4,14 @@ from sqlalchemy import select, func
 from decimal import Decimal
 from app.database import get_db
 from app.middleware.auth_middleware import require_admin, require_producer
-from app.services import loop_service, stem_pack_service
+from app.services import loop_service, stem_pack_service, drone_service
 from app.schemas.loop import LoopCreate, LoopUpdate, LoopResponse
 from app.schemas.stem_pack import StemPackCreate, StemCreate, StemPackResponse, StemResponse
+from app.schemas.drone_pad import DronePadCreate, DronePadResponse
 from app.schemas.user import UserResponse
 from app.schemas.common import success
 from app.models.loop import Genre, TempoFeel
+from app.models.drone_pad import DroneType, MusicalKey
 from app.models.user import User, UserRole
 from app.exceptions import NotFoundError
 import uuid
@@ -209,3 +211,32 @@ async def list_all_generations(
         "page": page,
         "page_size": page_size,
     })
+
+
+# --- Drone pad administration ---
+
+@router.post("/drones")
+async def upload_drone(
+    file: UploadFile = File(...),
+    thumbnail: UploadFile | None = File(None),
+    title: str = Form(...),
+    drone_type: DroneType = Form(...),
+    key: MusicalKey = Form(...),
+    price: Decimal = Form(...),
+    is_free: bool = Form(False),
+    db: AsyncSession = Depends(get_db),
+    producer=Depends(require_producer),
+):
+    data = DronePadCreate(title=title, drone_type=drone_type, key=key, price=price, is_free=is_free)
+    drone = await drone_service.create_drone(db, file, data, producer.id, thumbnail=thumbnail)
+    return success(DronePadResponse.model_validate(drone).model_dump(), "Drone pad uploaded")
+
+
+@router.delete("/drones/{drone_id}")
+async def delete_drone(
+    drone_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    admin=Depends(require_admin),
+):
+    await drone_service.delete_drone(db, drone_id)
+    return success(message="Drone pad deleted")

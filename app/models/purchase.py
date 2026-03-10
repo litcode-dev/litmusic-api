@@ -24,6 +24,7 @@ class Purchase(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     loop_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("loops.id"), nullable=True, index=True)
     stem_pack_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("stem_packs.id"), nullable=True, index=True)
+    drone_pad_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("drone_pads.id"), nullable=True, index=True)
     payment_reference: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     payment_provider: Mapped[PaymentProvider] = mapped_column(SAEnum(PaymentProvider), nullable=False)
     amount_paid: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
