@@ -19,24 +19,27 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # 1. Add new enum values to the existing type.
-    #    PostgreSQL requires these to be committed before they can be used in DML,
-    #    so we issue an explicit COMMIT then continue in a new implicit transaction.
-    op.execute("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'user'")
-    op.execute("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'producer'")
-    op.execute("COMMIT")
+    # Recreate enum without 'free', adding 'user' and 'producer'.
+    # We rename → create new → migrate data → alter column → drop old,
+    # all within the transaction (avoids ALTER TYPE ADD VALUE which cannot
+    # run inside a transaction block).
+    op.execute(sa.text("ALTER TYPE userrole RENAME TO userrole_old"))
+    op.execute(sa.text("CREATE TYPE userrole AS ENUM ('user', 'producer', 'admin')"))
 
-    # 2. Migrate existing data: free → user
-    op.execute("UPDATE users SET role = 'user' WHERE role = 'free'")
+    # Detach column from old enum before altering
+    op.execute(sa.text(
+        "ALTER TABLE users ALTER COLUMN role TYPE VARCHAR(50)"
+    ))
+    op.execute(sa.text("DROP TYPE userrole_old"))
 
-    # 3. Recreate enum without 'free'
-    op.execute("ALTER TYPE userrole RENAME TO userrole_old")
-    op.execute("CREATE TYPE userrole AS ENUM ('user', 'producer', 'admin')")
-    op.execute(
+    # Migrate data: free → user
+    op.execute(sa.text("UPDATE users SET role = 'user' WHERE role = 'free'"))
+
+    # Re-attach column to new enum
+    op.execute(sa.text(
         "ALTER TABLE users ALTER COLUMN role TYPE userrole "
         "USING role::text::userrole"
-    )
-    op.execute("DROP TYPE userrole_old")
+    ))
 
     # 4. Add OAuth columns
     op.add_column("users", sa.Column("oauth_provider", sa.String(50), nullable=True))
