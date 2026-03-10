@@ -63,6 +63,14 @@ async def delete_object(key: str) -> None:
     await asyncio.to_thread(_delete)
 
 
+def s3_key_for_raw_loop(loop_id: str) -> str:
+    return f"loops/raw/{loop_id}.wav"
+
+
+def s3_key_for_raw_drone(drone_id: str) -> str:
+    return f"drones/raw/{drone_id}.wav"
+
+
 def s3_key_for_encrypted_loop(loop_id: str) -> str:
     return f"loops/encrypted/{loop_id}.wav.enc"
 

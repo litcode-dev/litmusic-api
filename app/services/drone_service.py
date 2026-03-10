@@ -2,17 +2,14 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from fastapi import UploadFile
-import soundfile as sf
-import io
 
 from app.models.drone_pad import DronePad
 from app.models.purchase import Purchase
 from app.models.user import User
 from app.schemas.drone_pad import DronePadCreate, DronePadFilter
 from app.exceptions import NotFoundError, EntitlementError
-from app.services import s3_service, encryption_service
+from app.services import s3_service
 from app.utils.audio_validator import validate_wav_upload
-from app.utils.ffmpeg_helpers import generate_preview_mp3
 
 
 async def create_drone(
@@ -23,16 +20,10 @@ async def create_drone(
     thumbnail: UploadFile | None = None,
 ) -> DronePad:
     wav_bytes = await validate_wav_upload(file)
-    preview_mp3 = generate_preview_mp3(wav_bytes)
-    aes_key, aes_iv = encryption_service.generate_key_and_iv()
-    encrypted_wav = encryption_service.encrypt_bytes(wav_bytes, aes_key, aes_iv)
 
     drone_id = str(uuid.uuid4())
-    enc_key = s3_service.s3_key_for_encrypted_drone(drone_id)
-    prev_key = s3_service.s3_key_for_drone_preview(drone_id)
-
-    await s3_service.upload_bytes(enc_key, encrypted_wav)
-    await s3_service.upload_bytes(prev_key, preview_mp3, "audio/mpeg")
+    raw_key = s3_service.s3_key_for_raw_drone(drone_id)
+    await s3_service.upload_bytes(raw_key, wav_bytes, "audio/wav")
 
     thumb_key = None
     if thumbnail:
@@ -42,23 +33,17 @@ async def create_drone(
         thumb_key = s3_service.s3_key_for_drone_thumbnail(drone_id, ext)
         await s3_service.upload_bytes(thumb_key, thumb_bytes, content_type)
 
-    audio, sr = sf.read(io.BytesIO(wav_bytes))
-    duration = int(len(audio) / sr)
-
     drone = DronePad(
         id=uuid.UUID(drone_id),
         title=data.title,
         drone_type=data.drone_type,
         key=data.key,
-        duration=duration,
+        duration=0,
         price=data.price,
         is_free=data.is_free,
-        file_s3_key=enc_key,
-        preview_s3_key=prev_key,
         thumbnail_s3_key=thumb_key,
-        aes_key=aes_key,
-        aes_iv=aes_iv,
         created_by=created_by,
+        status="processing",
     )
     db.add(drone)
     await db.commit()

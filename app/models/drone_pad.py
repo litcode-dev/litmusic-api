@@ -51,5 +51,6 @@ class DronePad(Base):
     aes_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     aes_iv: Mapped[str | None] = mapped_column(Text, nullable=True)
     download_count: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(20), default="ready", server_default="ready", nullable=False)
     created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

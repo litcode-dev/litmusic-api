@@ -42,9 +42,19 @@ async def upload_loop(
         tags=[t.strip() for t in tags.split(",") if t.strip()],
     )
     loop = await loop_service.create_loop(db, file, data, producer.id, thumbnail=thumbnail)
-    from app.tasks.download_tasks import generate_waveform_task
-    generate_waveform_task.delay(str(loop.id))
-    return success(LoopResponse.model_validate(loop).model_dump(), "Loop uploaded")
+    from app.tasks.upload_tasks import process_loop_upload
+    process_loop_upload.delay(str(loop.id))
+    return success(LoopResponse.model_validate(loop).model_dump(), "Loop upload queued")
+
+
+@router.get("/loops/{loop_id}/status")
+async def loop_upload_status(
+    loop_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    producer=Depends(require_producer),
+):
+    loop = await loop_service.get_loop(db, loop_id)
+    return success({"id": str(loop.id), "status": loop.status})
 
 
 @router.put("/loops/{loop_id}")
@@ -229,7 +239,19 @@ async def upload_drone(
 ):
     data = DronePadCreate(title=title, drone_type=drone_type, key=key, price=price, is_free=is_free)
     drone = await drone_service.create_drone(db, file, data, producer.id, thumbnail=thumbnail)
-    return success(DronePadResponse.model_validate(drone).model_dump(), "Drone pad uploaded")
+    from app.tasks.upload_tasks import process_drone_upload
+    process_drone_upload.delay(str(drone.id))
+    return success(DronePadResponse.model_validate(drone).model_dump(), "Drone pad upload queued")
+
+
+@router.get("/drones/{drone_id}/status")
+async def drone_upload_status(
+    drone_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    producer=Depends(require_producer),
+):
+    drone = await drone_service.get_drone(db, drone_id)
+    return success({"id": str(drone.id), "status": drone.status})
 
 
 @router.delete("/drones/{drone_id}")
