@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     # Flutterwave
     flw_secret_key: str = ""
     flw_hash: str = ""  # Webhook verification hash (set in Flutterwave dashboard)
+    flutterwave_public_key: str = ""
+    flutterwave_secret_key: str = ""
+    flutterwave_secret_hash: str = ""
+    flutterwave_base_url: str = "https://api.flutterwave.com/v3"
 
     # Paystack
     paystack_secret_key: str = ""

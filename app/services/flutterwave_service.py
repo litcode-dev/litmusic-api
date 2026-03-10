@@ -2,8 +2,6 @@ import httpx
 from app.config import get_settings
 from app.exceptions import PaymentError
 
-FLW_BASE = "https://api.flutterwave.com/v3"
-
 
 async def initialize_payment(
     amount: float,
@@ -15,6 +13,8 @@ async def initialize_payment(
 ) -> dict:
     """Initialize a Flutterwave payment. Returns {payment_link, tx_ref}."""
     settings = get_settings()
+    base_url = settings.flutterwave_base_url
+    secret_key = settings.flutterwave_secret_key or settings.flw_secret_key
     payload = {
         "tx_ref": tx_ref,
         "amount": str(amount),
@@ -26,9 +26,9 @@ async def initialize_payment(
     }
     async with httpx.AsyncClient() as client:
         resp = await client.post(
-            f"{FLW_BASE}/payments",
+            f"{base_url}/payments",
             json=payload,
-            headers={"Authorization": f"Bearer {settings.flw_secret_key}"},
+            headers={"Authorization": f"Bearer {secret_key}"},
             timeout=15.0,
         )
         resp.raise_for_status()
@@ -39,18 +39,21 @@ async def initialize_payment(
 
 
 def verify_webhook_signature(verif_hash: str) -> bool:
-    """Verify Flutterwave webhook by comparing verif-hash header to configured FLW_HASH."""
+    """Verify Flutterwave webhook by comparing verif-hash header to configured secret hash."""
     settings = get_settings()
-    return verif_hash == settings.flw_hash
+    expected = settings.flutterwave_secret_hash or settings.flw_hash
+    return verif_hash == expected
 
 
 async def verify_transaction(transaction_id: str) -> dict:
     """Verify a Flutterwave transaction by ID. Returns the full API response dict."""
     settings = get_settings()
+    base_url = settings.flutterwave_base_url
+    secret_key = settings.flutterwave_secret_key or settings.flw_secret_key
     async with httpx.AsyncClient() as client:
         resp = await client.get(
-            f"{FLW_BASE}/transactions/{transaction_id}/verify",
-            headers={"Authorization": f"Bearer {settings.flw_secret_key}"},
+            f"{base_url}/transactions/{transaction_id}/verify",
+            headers={"Authorization": f"Bearer {secret_key}"},
             timeout=15.0,
         )
         resp.raise_for_status()
