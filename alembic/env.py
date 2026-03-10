@@ -1,5 +1,6 @@
 import asyncio
 from logging.config import fileConfig
+import sqlalchemy as sa
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
@@ -31,15 +32,17 @@ def do_run_migrations(connection):
         revision = step.up_revision if step.is_upgrade else (step.down_revision or "base")
         description = getattr(step, "doc", None) or revision
         try:
+            connection.execute(sa.text("SAVEPOINT migration_log_sp"))
             connection.execute(
-                __import__("sqlalchemy").text(
+                sa.text(
                     "INSERT INTO migration_log (revision, description, direction) "
                     "VALUES (:rev, :desc, :dir)"
                 ),
                 {"rev": revision, "desc": description, "dir": direction},
             )
+            connection.execute(sa.text("RELEASE SAVEPOINT migration_log_sp"))
         except Exception:
-            pass  # table may not exist yet on very first run
+            connection.execute(sa.text("ROLLBACK TO SAVEPOINT migration_log_sp"))
 
     context.configure(
         connection=connection,
