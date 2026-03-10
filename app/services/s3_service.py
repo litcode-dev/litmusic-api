@@ -81,3 +81,15 @@ def s3_key_for_encrypted_stem(stem_id: str) -> str:
 
 def s3_key_for_stem_preview(stem_id: str) -> str:
     return f"stems/previews/{stem_id}_preview.mp3"
+
+
+def s3_key_for_encrypted_drone(drone_id: str) -> str:
+    return f"drones/encrypted/{drone_id}.wav.enc"
+
+
+def s3_key_for_drone_preview(drone_id: str) -> str:
+    return f"drones/previews/{drone_id}_preview.mp3"
+
+
+def s3_key_for_drone_thumbnail(drone_id: str, ext: str = "jpg") -> str:
+    return f"drones/thumbnails/{drone_id}_thumbnail.{ext}"

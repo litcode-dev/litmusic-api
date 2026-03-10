@@ -1,0 +1,118 @@
+import uuid
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
+from fastapi import UploadFile
+import soundfile as sf
+import io
+
+from app.models.drone_pad import DronePad
+from app.models.purchase import Purchase
+from app.models.user import User
+from app.schemas.drone_pad import DronePadCreate, DronePadFilter
+from app.exceptions import NotFoundError, EntitlementError
+from app.services import s3_service, encryption_service
+from app.utils.audio_validator import validate_wav_upload
+from app.utils.ffmpeg_helpers import generate_preview_mp3
+
+
+async def create_drone(
+    db: AsyncSession,
+    file: UploadFile,
+    data: DronePadCreate,
+    created_by: uuid.UUID,
+    thumbnail: UploadFile | None = None,
+) -> DronePad:
+    wav_bytes = await validate_wav_upload(file)
+    preview_mp3 = generate_preview_mp3(wav_bytes)
+    aes_key, aes_iv = encryption_service.generate_key_and_iv()
+    encrypted_wav = encryption_service.encrypt_bytes(wav_bytes, aes_key, aes_iv)
+
+    drone_id = str(uuid.uuid4())
+    enc_key = s3_service.s3_key_for_encrypted_drone(drone_id)
+    prev_key = s3_service.s3_key_for_drone_preview(drone_id)
+
+    await s3_service.upload_bytes(enc_key, encrypted_wav)
+    await s3_service.upload_bytes(prev_key, preview_mp3, "audio/mpeg")
+
+    thumb_key = None
+    if thumbnail:
+        thumb_bytes = await thumbnail.read()
+        content_type = thumbnail.content_type or "image/jpeg"
+        ext = content_type.split("/")[-1] if "/" in content_type else "jpg"
+        thumb_key = s3_service.s3_key_for_drone_thumbnail(drone_id, ext)
+        await s3_service.upload_bytes(thumb_key, thumb_bytes, content_type)
+
+    audio, sr = sf.read(io.BytesIO(wav_bytes))
+    duration = int(len(audio) / sr)
+
+    drone = DronePad(
+        id=uuid.UUID(drone_id),
+        title=data.title,
+        drone_type=data.drone_type,
+        key=data.key,
+        duration=duration,
+        price=data.price,
+        is_free=data.is_free,
+        file_s3_key=enc_key,
+        preview_s3_key=prev_key,
+        thumbnail_s3_key=thumb_key,
+        aes_key=aes_key,
+        aes_iv=aes_iv,
+        created_by=created_by,
+    )
+    db.add(drone)
+    await db.commit()
+    await db.refresh(drone)
+    return drone
+
+
+async def get_drone(db: AsyncSession, drone_id: uuid.UUID) -> DronePad:
+    drone = await db.get(DronePad, drone_id)
+    if not drone:
+        raise NotFoundError(f"Drone pad {drone_id} not found")
+    return drone
+
+
+async def list_drones(db: AsyncSession, filters: DronePadFilter) -> tuple[list[DronePad], int]:
+    q = select(DronePad)
+    if filters.key:
+        q = q.where(DronePad.key == filters.key)
+    if filters.drone_type:
+        q = q.where(DronePad.drone_type == filters.drone_type)
+    if filters.is_free is not None:
+        q = q.where(DronePad.is_free == filters.is_free)
+
+    count_q = select(func.count()).select_from(q.subquery())
+    total = await db.scalar(count_q)
+
+    q = q.order_by(DronePad.key, DronePad.drone_type)
+    q = q.offset((filters.page - 1) * filters.page_size).limit(filters.page_size)
+    result = await db.scalars(q)
+    return list(result.all()), total or 0
+
+
+async def check_download_entitlement(
+    db: AsyncSession, user: User, drone: DronePad
+) -> None:
+    if drone.is_free:
+        return
+    purchase = await db.scalar(
+        select(Purchase).where(
+            Purchase.user_id == user.id,
+            Purchase.drone_pad_id == drone.id,
+        )
+    )
+    if not purchase:
+        raise EntitlementError()
+
+
+async def delete_drone(db: AsyncSession, drone_id: uuid.UUID) -> None:
+    drone = await get_drone(db, drone_id)
+    if drone.file_s3_key:
+        await s3_service.delete_object(drone.file_s3_key)
+    if drone.preview_s3_key:
+        await s3_service.delete_object(drone.preview_s3_key)
+    if drone.thumbnail_s3_key:
+        await s3_service.delete_object(drone.thumbnail_s3_key)
+    await db.delete(drone)
+    await db.commit()
