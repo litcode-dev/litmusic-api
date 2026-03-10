@@ -78,17 +78,19 @@ async def health_check():
     except Exception:
         db_ok = False
 
+    redis_error = None
     try:
         r = Redis.from_url(settings.redis_url)
         await r.ping()
         await r.aclose()
         redis_ok = True
-    except Exception:
+    except Exception as e:
         redis_ok = False
+        redis_error = str(e)
 
     overall = "healthy" if db_ok and redis_ok else "degraded"
     return {
         "status": overall,
         "database": "ok" if db_ok else "error",
-        "redis": "ok" if redis_ok else "error",
+        "redis": "ok" if redis_ok else f"error: {redis_error}",
     }
