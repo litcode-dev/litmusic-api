@@ -1,9 +1,12 @@
 import json
 import structlog
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.config import get_settings
 from app.exceptions import AppError, app_error_handler
 from app.middleware.logging_middleware import LoggingMiddleware
@@ -50,8 +53,33 @@ app.add_middleware(
 # Logging
 app.add_middleware(LoggingMiddleware)
 
-# Error handler
+# Error handlers — all responses use the same envelope format
 app.add_exception_handler(AppError, app_error_handler)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"status": "error", "data": None, "message": str(exc.detail)},
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    errors = [f"{' -> '.join(str(l) for l in e['loc'])}: {e['msg']}" for e in exc.errors()]
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"status": "error", "data": None, "message": "; ".join(errors)},
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"status": "error", "data": None, "message": "An unexpected error occurred"},
+    )
 
 # Routers
 PREFIX = "/api/v1"
