@@ -1,4 +1,5 @@
 import asyncio
+from celery.exceptions import MaxRetriesExceededError
 from app.tasks.celery_app import celery_app
 
 
@@ -62,9 +63,12 @@ def process_loop_upload(self, loop_id: str):
                 s3.delete_object(Bucket=settings.s3_bucket_name, Key=raw_key)
 
             except Exception as exc:
-                loop.status = "failed"
-                await db.commit()
-                raise self.retry(exc=exc)
+                try:
+                    raise self.retry(exc=exc)
+                except MaxRetriesExceededError:
+                    loop.status = "failed"
+                    await db.commit()
+                    raise
 
     asyncio.run(_run())
 
@@ -130,8 +134,11 @@ def process_drone_upload(self, drone_id: str):
                 s3.delete_object(Bucket=settings.s3_bucket_name, Key=raw_key)
 
             except Exception as exc:
-                drone.status = "failed"
-                await db.commit()
-                raise self.retry(exc=exc)
+                try:
+                    raise self.retry(exc=exc)
+                except MaxRetriesExceededError:
+                    drone.status = "failed"
+                    await db.commit()
+                    raise
 
     asyncio.run(_run())
