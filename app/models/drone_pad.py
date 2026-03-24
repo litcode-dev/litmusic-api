@@ -41,7 +41,11 @@ class DronePad(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     drone_type: Mapped[DroneType] = mapped_column(SAEnum(DroneType), nullable=False, index=True)
-    key: Mapped[MusicalKey] = mapped_column(SAEnum(MusicalKey), nullable=False, index=True)
+    key: Mapped[MusicalKey] = mapped_column(
+        SAEnum(MusicalKey, values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False,
+        index=True,
+    )
     duration: Mapped[int] = mapped_column(Integer, nullable=False)
     price: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     is_free: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
