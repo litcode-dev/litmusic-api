@@ -97,7 +97,7 @@ def process_drone_upload(self, drone_id: str):
             s3_key_for_encrypted_drone,
             s3_key_for_drone_preview,
         )
-        from app.utils.ffmpeg_helpers import generate_preview_mp3, trim_wav_to_duration
+        from app.utils.ffmpeg_helpers import generate_preview_mp3
         from app.config import get_settings
 
         settings = get_settings()
@@ -123,7 +123,6 @@ def process_drone_upload(self, drone_id: str):
                     obj = s3.get_object(Bucket=settings.s3_bucket_name, Key=raw_key)
                     wav_bytes = obj["Body"].read()
 
-                    wav_bytes = trim_wav_to_duration(wav_bytes, max_seconds=60)
                     preview_mp3 = generate_preview_mp3(wav_bytes)
                     aes_key, aes_iv = encryption_service.generate_key_and_iv()
                     encrypted_wav = encryption_service.encrypt_bytes(wav_bytes, aes_key, aes_iv)
