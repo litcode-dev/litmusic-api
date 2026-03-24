@@ -5,12 +5,16 @@ from sqlalchemy.orm import selectinload
 import uuid
 
 from app.database import get_db
-from app.services import drum_kit_service, s3_service
+from app.services import drum_kit_service, cache_service
 from app.schemas.drum_kit import DrumKitFilter, DrumKitResponse, DrumKitCategoryResponse
 from app.schemas.common import success
 from app.models.drum_kit import DrumKit, DrumKitCategory
 
 router = APIRouter(prefix="/drum-kits", tags=["drum-kits"])
+
+
+def _list_cache_key(search, is_free, tags, page, page_size) -> str:
+    return f"drum_kit:list:{search}:{is_free}:{tags}:{page}:{page_size}"
 
 
 @router.get("")
@@ -22,6 +26,11 @@ async def list_drum_kits(
     page_size: int = 20,
     db: AsyncSession = Depends(get_db),
 ):
+    cache_key = _list_cache_key(search, is_free, tags, page, page_size)
+    cached = await cache_service.get(cache_key)
+    if cached is not None:
+        return success(cached)
+
     filters = DrumKitFilter(
         search=search,
         is_free=is_free,
@@ -30,16 +39,23 @@ async def list_drum_kits(
         page_size=page_size,
     )
     kits, total = await drum_kit_service.list_drum_kits(db, filters)
-    return success({
+    data = {
         "items": [DrumKitResponse.model_validate(k).model_dump() for k in kits],
         "total": total,
         "page": page,
         "page_size": page_size,
-    })
+    }
+    await cache_service.set(cache_key, data, cache_service.TTL_DRUM_KIT_LIST)
+    return success(data)
 
 
 @router.get("/{kit_id}")
 async def get_drum_kit(kit_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    cache_key = f"drum_kit:detail:{kit_id}"
+    cached = await cache_service.get(cache_key)
+    if cached is not None:
+        return success(cached)
+
     result = await db.execute(
         select(DrumKit)
         .options(selectinload(DrumKit.categories).selectinload(DrumKitCategory.samples))
@@ -49,7 +65,10 @@ async def get_drum_kit(kit_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     if not kit:
         from app.exceptions import NotFoundError
         raise NotFoundError(f"Drum kit {kit_id} not found")
-    return success(DrumKitResponse.model_validate(kit).model_dump())
+
+    data = DrumKitResponse.model_validate(kit).model_dump()
+    await cache_service.set(cache_key, data, cache_service.TTL_DRUM_KIT_DETAIL)
+    return success(data)
 
 
 @router.get("/{kit_id}/categories/{category_id}")

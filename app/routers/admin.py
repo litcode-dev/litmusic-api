@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload
 from decimal import Decimal
 from app.database import get_db
 from app.middleware.auth_middleware import require_admin, require_producer
-from app.services import loop_service, stem_pack_service, drone_service, drum_kit_service
+from app.services import loop_service, stem_pack_service, drone_service, drum_kit_service, cache_service
 from app.schemas.loop import LoopCreate, LoopUpdate, LoopResponse
 from app.schemas.stem_pack import StemPackCreate, StemCreate, StemPackResponse, StemResponse
 from app.schemas.drone_pad import DronePadCreate, DronePadResponse, DronePadCategoryCreate, DronePadCategoryResponse
@@ -235,7 +235,10 @@ async def create_drone_category(
     producer=Depends(require_producer),
 ):
     category = await drone_service.create_category(db, body, producer.id)
-    return success(DronePadCategoryResponse.model_validate(category).model_dump(), "Category created")
+    await cache_service.delete("drone:categories")
+    data = DronePadCategoryResponse.model_validate(category).model_dump()
+    await cache_service.set(f"drone:category:{category.id}", data, cache_service.TTL_DRONE_CATEGORIES)
+    return success(data, "Category created")
 
 
 @router.get("/drones/categories")
@@ -254,6 +257,8 @@ async def delete_drone_category(
     admin=Depends(require_admin),
 ):
     await drone_service.delete_category(db, category_id)
+    await cache_service.delete("drone:categories")
+    await cache_service.delete(f"drone:category:{category_id}")
     return success(message="Category deleted")
 
 
@@ -316,6 +321,7 @@ async def create_drum_kit(
         is_free=is_free,
     )
     kit = await drum_kit_service.create_drum_kit(db, data, producer.id, thumbnail=thumbnail)
+    await cache_service.delete_pattern("drum_kit:list:*")
     return success(DrumKitResponse.model_validate(kit).model_dump(), "Drum kit created")
 
 
@@ -361,6 +367,8 @@ async def create_drum_kit_category(
         .where(DrumKitCategory.id == category.id)
     )
     category = result.scalar_one()
+    # Invalidate detail cache – the kit now has a new category
+    await cache_service.delete(f"drum_kit:detail:{kit_id}")
     return success(DrumKitCategoryResponse.model_validate(category).model_dump(), "Category created, samples queued for processing")
 
 
@@ -372,6 +380,7 @@ async def delete_drum_kit_category(
     admin=Depends(require_admin),
 ):
     await drum_kit_service.delete_category(db, kit_id, category_id)
+    await cache_service.delete(f"drum_kit:detail:{kit_id}")
     return success(message="Category deleted")
 
 
@@ -382,4 +391,6 @@ async def delete_drum_kit(
     admin=Depends(require_admin),
 ):
     await drum_kit_service.delete_drum_kit(db, kit_id)
+    await cache_service.delete(f"drum_kit:detail:{kit_id}")
+    await cache_service.delete_pattern("drum_kit:list:*")
     return success(message="Drum kit deleted")

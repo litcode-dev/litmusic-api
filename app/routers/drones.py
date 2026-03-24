@@ -6,7 +6,7 @@ import uuid
 
 from app.database import get_db
 from app.middleware.auth_middleware import get_current_user
-from app.services import drone_service, s3_service
+from app.services import drone_service, s3_service, cache_service
 from app.schemas.drone_pad import DronePadFilter, DronePadResponse, DronePadCategoryResponse
 from app.schemas.common import success
 from app.models.drone_pad import DroneType, MusicalKey
@@ -16,14 +16,25 @@ router = APIRouter(prefix="/drones", tags=["drones"])
 
 @router.get("/categories")
 async def list_drone_categories(db: AsyncSession = Depends(get_db)):
+    cached = await cache_service.get("drone:categories")
+    if cached is not None:
+        return success(cached)
     categories = await drone_service.list_categories(db)
-    return success([DronePadCategoryResponse.model_validate(c).model_dump() for c in categories])
+    data = [DronePadCategoryResponse.model_validate(c).model_dump() for c in categories]
+    await cache_service.set("drone:categories", data, cache_service.TTL_DRONE_CATEGORIES)
+    return success(data)
 
 
 @router.get("/categories/{category_id}")
 async def get_drone_category(category_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    cache_key = f"drone:category:{category_id}"
+    cached = await cache_service.get(cache_key)
+    if cached is not None:
+        return success(cached)
     category = await drone_service.get_category(db, category_id)
-    return success(DronePadCategoryResponse.model_validate(category).model_dump())
+    data = DronePadCategoryResponse.model_validate(category).model_dump()
+    await cache_service.set(cache_key, data, cache_service.TTL_DRONE_CATEGORIES)
+    return success(data)
 
 
 @router.get("")
