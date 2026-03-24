@@ -101,3 +101,19 @@ def s3_key_for_drone_preview(drone_id: str) -> str:
 
 def s3_key_for_drone_thumbnail(drone_id: str, ext: str = "jpg") -> str:
     return f"drones/thumbnails/{drone_id}_thumbnail.{ext}"
+
+
+def s3_key_for_raw_drum_sample(sample_id: str) -> str:
+    return f"drum-kits/raw/{sample_id}.wav"
+
+
+def s3_key_for_encrypted_drum_sample(sample_id: str) -> str:
+    return f"drum-kits/encrypted/{sample_id}.wav.enc"
+
+
+def s3_key_for_drum_sample_preview(sample_id: str) -> str:
+    return f"drum-kits/previews/{sample_id}_preview.mp3"
+
+
+def s3_key_for_drum_kit_thumbnail(kit_id: str, ext: str = "jpg") -> str:
+    return f"drum-kits/thumbnails/{kit_id}_thumbnail.{ext}"

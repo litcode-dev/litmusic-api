@@ -82,6 +82,84 @@ def process_loop_upload(self, loop_id: str):
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=10)
+def process_drum_sample_upload(self, sample_id: str):
+    async def _run():
+        import uuid
+        import io
+        import boto3
+        import soundfile as sf
+        from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+        from sqlalchemy.pool import NullPool
+        from app.models.drum_kit import DrumSample
+        from app.services import encryption_service
+        from app.services.s3_service import (
+            s3_key_for_raw_drum_sample,
+            s3_key_for_encrypted_drum_sample,
+            s3_key_for_drum_sample_preview,
+        )
+        from app.utils.ffmpeg_helpers import generate_preview_mp3
+        from app.config import get_settings
+
+        settings = get_settings()
+        db_url = settings.database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        engine = create_async_engine(db_url, poolclass=NullPool)
+        SessionLocal = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+
+        s3 = boto3.client(
+            "s3",
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key,
+            region_name=settings.aws_region,
+        )
+
+        try:
+            async with SessionLocal() as db:
+                sample = await db.get(DrumSample, uuid.UUID(sample_id))
+                if not sample:
+                    return
+
+                try:
+                    raw_key = s3_key_for_raw_drum_sample(sample_id)
+                    obj = s3.get_object(Bucket=settings.s3_bucket_name, Key=raw_key)
+                    wav_bytes = obj["Body"].read()
+
+                    preview_mp3 = generate_preview_mp3(wav_bytes)
+                    aes_key, aes_iv = encryption_service.generate_key_and_iv()
+                    encrypted_wav = encryption_service.encrypt_bytes(wav_bytes, aes_key, aes_iv)
+
+                    enc_key = s3_key_for_encrypted_drum_sample(sample_id)
+                    prev_key = s3_key_for_drum_sample_preview(sample_id)
+
+                    s3.put_object(Bucket=settings.s3_bucket_name, Key=enc_key, Body=encrypted_wav, ContentType="application/octet-stream")
+                    s3.put_object(Bucket=settings.s3_bucket_name, Key=prev_key, Body=preview_mp3, ContentType="audio/mpeg")
+
+                    audio, sr = sf.read(io.BytesIO(wav_bytes))
+                    duration = int(len(audio) / sr)
+
+                    sample.file_s3_key = enc_key
+                    sample.preview_s3_key = prev_key
+                    sample.aes_key = aes_key
+                    sample.aes_iv = aes_iv
+                    sample.duration = duration
+                    sample.status = "ready"
+                    await db.commit()
+
+                    s3.delete_object(Bucket=settings.s3_bucket_name, Key=raw_key)
+
+                except Exception as exc:
+                    try:
+                        raise self.retry(exc=exc)
+                    except MaxRetriesExceededError:
+                        sample.status = "failed"
+                        await db.commit()
+                        raise
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=10)
 def process_drone_upload(self, drone_id: str):
     async def _run():
         import uuid
