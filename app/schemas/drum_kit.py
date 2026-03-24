@@ -2,6 +2,8 @@ import uuid
 from datetime import datetime
 from pydantic import BaseModel, field_validator
 
+DOWNLOAD_EXPIRY_SECONDS = 900  # 15 minutes
+
 
 class DrumKitCreate(BaseModel):
     title: str
@@ -45,6 +47,29 @@ class DrumKitResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class DrumSampleDownloadItem(BaseModel):
+    id: uuid.UUID
+    label: str
+    signed_url: str
+    aes_key: str
+    aes_iv: str
+    duration: int
+    expires_in_seconds: int = DOWNLOAD_EXPIRY_SECONDS
+
+
+class DrumKitCategoryDownloadItem(BaseModel):
+    id: uuid.UUID
+    name: str
+    samples: list[DrumSampleDownloadItem]
+
+
+class DrumKitDownloadResponse(BaseModel):
+    kit_id: uuid.UUID
+    title: str
+    categories: list[DrumKitCategoryDownloadItem]
+    expires_in_seconds: int = DOWNLOAD_EXPIRY_SECONDS
 
 
 class DrumKitFilter(BaseModel):
