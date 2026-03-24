@@ -1,15 +1,59 @@
 import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from fastapi import UploadFile
 
-from app.models.drone_pad import DronePad
+from app.models.drone_pad import DronePad, DronePadCategory
 from app.models.purchase import Purchase
 from app.models.user import User
-from app.schemas.drone_pad import DronePadCreate, DronePadFilter
+from app.schemas.drone_pad import DronePadCreate, DronePadCategoryCreate, DronePadFilter
 from app.exceptions import NotFoundError, EntitlementError
 from app.services import s3_service
 from app.utils.audio_validator import validate_wav_upload
+
+
+async def create_category(
+    db: AsyncSession,
+    data: DronePadCategoryCreate,
+    created_by: uuid.UUID,
+) -> DronePadCategory:
+    existing = await db.scalar(
+        select(DronePadCategory).where(DronePadCategory.name == data.name)
+    )
+    if existing:
+        from app.exceptions import AppError
+        raise AppError(f"Category '{data.name}' already exists", status_code=409)
+    category = DronePadCategory(name=data.name, description=data.description, created_by=created_by)
+    db.add(category)
+    await db.commit()
+    await db.refresh(category)
+    return category
+
+
+async def get_category(db: AsyncSession, category_id: uuid.UUID) -> DronePadCategory:
+    category = await db.get(DronePadCategory, category_id)
+    if not category:
+        raise NotFoundError(f"Drone pad category {category_id} not found")
+    return category
+
+
+async def list_categories(db: AsyncSession) -> list[DronePadCategory]:
+    result = await db.scalars(select(DronePadCategory).order_by(DronePadCategory.name))
+    return list(result.all())
+
+
+async def delete_category(db: AsyncSession, category_id: uuid.UUID) -> None:
+    category = await get_category(db, category_id)
+    # Nullify category_id on associated drones (ON DELETE SET NULL handles it at DB level,
+    # but we do it explicitly so in-flight ORM objects stay consistent)
+    await db.execute(
+        DronePad.__table__.update()
+        .where(DronePad.category_id == category_id)
+        .values(category_id=None)
+    )
+    await db.delete(category)
+    await db.commit()
 
 
 async def create_drone(
@@ -41,6 +85,7 @@ async def create_drone(
         duration=0,
         price=data.price,
         is_free=data.is_free,
+        category_id=data.category_id,
         thumbnail_s3_key=thumb_key,
         created_by=created_by,
         status="processing",

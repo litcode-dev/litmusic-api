@@ -8,7 +8,7 @@ from app.middleware.auth_middleware import require_admin, require_producer
 from app.services import loop_service, stem_pack_service, drone_service, drum_kit_service
 from app.schemas.loop import LoopCreate, LoopUpdate, LoopResponse
 from app.schemas.stem_pack import StemPackCreate, StemCreate, StemPackResponse, StemResponse
-from app.schemas.drone_pad import DronePadCreate, DronePadResponse
+from app.schemas.drone_pad import DronePadCreate, DronePadResponse, DronePadCategoryCreate, DronePadCategoryResponse
 from app.schemas.drum_kit import DrumKitCreate, DrumKitResponse, DrumKitCategoryResponse
 from app.schemas.user import UserResponse
 from app.schemas.common import success
@@ -228,6 +228,35 @@ async def list_all_generations(
 
 # --- Drone pad administration ---
 
+@router.post("/drones/categories")
+async def create_drone_category(
+    body: DronePadCategoryCreate,
+    db: AsyncSession = Depends(get_db),
+    producer=Depends(require_producer),
+):
+    category = await drone_service.create_category(db, body, producer.id)
+    return success(DronePadCategoryResponse.model_validate(category).model_dump(), "Category created")
+
+
+@router.get("/drones/categories")
+async def list_drone_categories(
+    db: AsyncSession = Depends(get_db),
+    producer=Depends(require_producer),
+):
+    categories = await drone_service.list_categories(db)
+    return success([DronePadCategoryResponse.model_validate(c).model_dump() for c in categories])
+
+
+@router.delete("/drones/categories/{category_id}")
+async def delete_drone_category(
+    category_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    admin=Depends(require_admin),
+):
+    await drone_service.delete_category(db, category_id)
+    return success(message="Category deleted")
+
+
 @router.post("/drones")
 async def upload_drone(
     file: UploadFile = File(...),
@@ -237,10 +266,11 @@ async def upload_drone(
     key: MusicalKey = Form(...),
     price: Decimal = Form(...),
     is_free: bool = Form(False),
+    category_id: uuid.UUID | None = Form(None),
     db: AsyncSession = Depends(get_db),
     producer=Depends(require_producer),
 ):
-    data = DronePadCreate(title=title, drone_type=drone_type, key=key, price=price, is_free=is_free)
+    data = DronePadCreate(title=title, drone_type=drone_type, key=key, price=price, is_free=is_free, category_id=category_id)
     drone = await drone_service.create_drone(db, file, data, producer.id, thumbnail=thumbnail)
     from app.tasks.upload_tasks import process_drone_upload
     process_drone_upload.delay(str(drone.id))
