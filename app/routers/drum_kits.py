@@ -49,7 +49,7 @@ async def list_drum_kits(
     )
     kits, total = await drum_kit_service.list_drum_kits(db, filters)
     data = {
-        "items": [DrumKitResponse.model_validate(k).model_dump() for k in kits],
+        "items": [DrumKitResponse.model_validate(k).model_dump(mode="json") for k in kits],
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -74,7 +74,7 @@ async def get_drum_kit(kit_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     if not kit:
         raise NotFoundError(f"Drum kit {kit_id} not found")
 
-    data = DrumKitResponse.model_validate(kit).model_dump()
+    data = DrumKitResponse.model_validate(kit).model_dump(mode="json")
     await cache_service.set(cache_key, data, cache_service.TTL_DRUM_KIT_DETAIL)
     return success(data)
 
