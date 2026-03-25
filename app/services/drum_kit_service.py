@@ -58,6 +58,7 @@ async def get_drum_kit(db: AsyncSession, kit_id: uuid.UUID) -> DrumKit:
 
 
 async def list_drum_kits(db: AsyncSession, filters: DrumKitFilter) -> tuple[list[DrumKit], int]:
+    from sqlalchemy.orm import selectinload
     q = select(DrumKit)
     if filters.search:
         q = q.where(DrumKit.title.ilike(f"%{filters.search}%"))
@@ -69,10 +70,14 @@ async def list_drum_kits(db: AsyncSession, filters: DrumKitFilter) -> tuple[list
     count_q = select(func.count()).select_from(q.subquery())
     total = await db.scalar(count_q)
 
-    q = q.order_by(DrumKit.created_at.desc())
-    q = q.offset((filters.page - 1) * filters.page_size).limit(filters.page_size)
-    result = await db.scalars(q)
-    return list(result.all()), total or 0
+    q = (
+        q.options(selectinload(DrumKit.categories).selectinload(DrumKitCategory.samples))
+        .order_by(DrumKit.created_at.desc())
+        .offset((filters.page - 1) * filters.page_size)
+        .limit(filters.page_size)
+    )
+    result = await db.execute(q)
+    return list(result.scalars().all()), total or 0
 
 
 async def create_category_with_samples(

@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,6 +27,13 @@ def _list_cache_key(search, is_free, tags, page, page_size) -> str:
     return f"drum_kit:list:{search}:{is_free}:{tags}:{page}:{page_size}"
 
 
+async def _kit_to_dict(kit) -> dict:
+    data = DrumKitResponse.model_validate(kit).model_dump(mode="json")
+    if kit.thumbnail_s3_key:
+        data["thumbnail_url"] = await s3_service.get_download_url(kit.thumbnail_s3_key)
+    return data
+
+
 @router.get("")
 async def list_drum_kits(
     search: str | None = None,
@@ -49,7 +57,7 @@ async def list_drum_kits(
     )
     kits, total = await drum_kit_service.list_drum_kits(db, filters)
     data = {
-        "items": [DrumKitResponse.model_validate(k).model_dump(mode="json") for k in kits],
+        "items": list(await asyncio.gather(*[_kit_to_dict(k) for k in kits])),
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -74,7 +82,7 @@ async def get_drum_kit(kit_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     if not kit:
         raise NotFoundError(f"Drum kit {kit_id} not found")
 
-    data = DrumKitResponse.model_validate(kit).model_dump(mode="json")
+    data = await _kit_to_dict(kit)
     await cache_service.set(cache_key, data, cache_service.TTL_DRUM_KIT_DETAIL)
     return success(data)
 

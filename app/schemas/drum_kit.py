@@ -41,6 +41,7 @@ class DrumKitResponse(BaseModel):
     title: str
     slug: str
     description: str | None
+    thumbnail_url: str | None = None
     tags: list[str]
     is_free: bool
     categories: list[DrumKitCategoryResponse] = []
