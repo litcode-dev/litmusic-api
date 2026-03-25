@@ -5,12 +5,27 @@ from pydantic import BaseModel, model_validator, Field
 from app.models.drone_pad import DroneType, MusicalKey
 
 
+class DronePadCategoryCreate(BaseModel):
+    name: str
+    description: str | None = None
+
+
+class DronePadCategoryResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    description: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class DronePadCreate(BaseModel):
     title: str
     drone_type: DroneType
     key: MusicalKey
     price: Decimal
     is_free: bool = False
+    category_id: uuid.UUID | None = None
 
 
 class DronePadResponse(BaseModel):
@@ -21,6 +36,8 @@ class DronePadResponse(BaseModel):
     duration: int
     price: Decimal
     is_free: bool
+    category_id: uuid.UUID | None = None
+    category: DronePadCategoryResponse | None = None
     preview_s3_key: str | None = Field(default=None, exclude=True)
     thumbnail_s3_key: str | None = Field(default=None, exclude=True)
     preview_url: str | None = None

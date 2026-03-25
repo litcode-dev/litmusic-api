@@ -5,10 +5,10 @@ from sqlalchemy.orm import selectinload
 from decimal import Decimal
 from app.database import get_db
 from app.middleware.auth_middleware import require_admin, require_producer
-from app.services import loop_service, stem_pack_service, drone_service, drum_kit_service
+from app.services import loop_service, stem_pack_service, drone_service, drum_kit_service, cache_service
 from app.schemas.loop import LoopCreate, LoopUpdate, LoopResponse
 from app.schemas.stem_pack import StemPackCreate, StemCreate, StemPackResponse, StemResponse
-from app.schemas.drone_pad import DronePadCreate, DronePadResponse
+from app.schemas.drone_pad import DronePadCreate, DronePadResponse, DronePadCategoryCreate, DronePadCategoryResponse
 from app.schemas.drum_kit import DrumKitCreate, DrumKitResponse, DrumKitCategoryResponse
 from app.schemas.user import UserResponse
 from app.schemas.common import success
@@ -228,6 +228,40 @@ async def list_all_generations(
 
 # --- Drone pad administration ---
 
+@router.post("/drones/categories")
+async def create_drone_category(
+    body: DronePadCategoryCreate,
+    db: AsyncSession = Depends(get_db),
+    producer=Depends(require_producer),
+):
+    category = await drone_service.create_category(db, body, producer.id)
+    await cache_service.delete("drone:categories")
+    data = DronePadCategoryResponse.model_validate(category).model_dump()
+    await cache_service.set(f"drone:category:{category.id}", data, cache_service.TTL_DRONE_CATEGORIES)
+    return success(data, "Category created")
+
+
+@router.get("/drones/categories")
+async def list_drone_categories(
+    db: AsyncSession = Depends(get_db),
+    producer=Depends(require_producer),
+):
+    categories = await drone_service.list_categories(db)
+    return success([DronePadCategoryResponse.model_validate(c).model_dump() for c in categories])
+
+
+@router.delete("/drones/categories/{category_id}")
+async def delete_drone_category(
+    category_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    admin=Depends(require_admin),
+):
+    await drone_service.delete_category(db, category_id)
+    await cache_service.delete("drone:categories")
+    await cache_service.delete(f"drone:category:{category_id}")
+    return success(message="Category deleted")
+
+
 @router.post("/drones")
 async def upload_drone(
     file: UploadFile = File(...),
@@ -237,10 +271,11 @@ async def upload_drone(
     key: MusicalKey = Form(...),
     price: Decimal = Form(...),
     is_free: bool = Form(False),
+    category_id: uuid.UUID | None = Form(None),
     db: AsyncSession = Depends(get_db),
     producer=Depends(require_producer),
 ):
-    data = DronePadCreate(title=title, drone_type=drone_type, key=key, price=price, is_free=is_free)
+    data = DronePadCreate(title=title, drone_type=drone_type, key=key, price=price, is_free=is_free, category_id=category_id)
     drone = await drone_service.create_drone(db, file, data, producer.id, thumbnail=thumbnail)
     from app.tasks.upload_tasks import process_drone_upload
     process_drone_upload.delay(str(drone.id))
@@ -286,6 +321,7 @@ async def create_drum_kit(
         is_free=is_free,
     )
     kit = await drum_kit_service.create_drum_kit(db, data, producer.id, thumbnail=thumbnail)
+    await cache_service.delete_pattern("drum_kit:list:*")
     return success(DrumKitResponse.model_validate(kit).model_dump(), "Drum kit created")
 
 
@@ -331,6 +367,8 @@ async def create_drum_kit_category(
         .where(DrumKitCategory.id == category.id)
     )
     category = result.scalar_one()
+    # Invalidate detail cache – the kit now has a new category
+    await cache_service.delete(f"drum_kit:detail:{kit_id}")
     return success(DrumKitCategoryResponse.model_validate(category).model_dump(), "Category created, samples queued for processing")
 
 
@@ -342,6 +380,7 @@ async def delete_drum_kit_category(
     admin=Depends(require_admin),
 ):
     await drum_kit_service.delete_category(db, kit_id, category_id)
+    await cache_service.delete(f"drum_kit:detail:{kit_id}")
     return success(message="Category deleted")
 
 
@@ -352,4 +391,6 @@ async def delete_drum_kit(
     admin=Depends(require_admin),
 ):
     await drum_kit_service.delete_drum_kit(db, kit_id)
+    await cache_service.delete(f"drum_kit:detail:{kit_id}")
+    await cache_service.delete_pattern("drum_kit:list:*")
     return success(message="Drum kit deleted")
