@@ -312,9 +312,11 @@ async def bulk_upload_drones(
         db, files, validated_keys, title, price, is_free, category_id, producer.id, thumbnail=thumbnail
     )
 
+    from app.services import s3_service as _s3
+
     async def _upload_and_queue(drone_id: str, wav_bytes: bytes) -> None:
-        raw_key = drone_service.s3_service.s3_key_for_raw_drone(drone_id)
-        await drone_service.s3_service.upload_bytes(raw_key, wav_bytes, "audio/wav")
+        raw_key = _s3.s3_key_for_raw_drone(drone_id)
+        await _s3.upload_bytes(raw_key, wav_bytes, "audio/wav")
         from app.tasks.upload_tasks import process_drone_upload
         process_drone_upload.delay(drone_id)
 
