@@ -8,7 +8,7 @@ from app.middleware.auth_middleware import require_admin, require_producer
 from app.services import loop_service, stem_pack_service, drone_service, drum_kit_service, cache_service
 from app.schemas.loop import LoopCreate, LoopUpdate, LoopResponse
 from app.schemas.stem_pack import StemPackCreate, StemCreate, StemPackResponse, StemResponse
-from app.schemas.drone_pad import DronePadCreate, DronePadResponse, DronePadCategoryCreate, DronePadCategoryResponse
+from app.schemas.drone_pad import DronePadCreate, DronePadUpdate, DronePadResponse, DronePadCategoryCreate, DronePadCategoryResponse
 from app.schemas.drum_kit import DrumKitCreate, DrumKitResponse, DrumKitCategoryResponse
 from app.schemas.user import UserResponse
 from app.schemas.common import success
@@ -281,6 +281,62 @@ async def upload_drone(
     return success(DronePadResponse.model_validate(drone).model_dump(), "Drone pad upload queued")
 
 
+@router.post("/drones/bulk")
+async def bulk_upload_drones(
+    files: list[UploadFile] = File(...),
+    keys: str = Form(...),  # comma-separated MusicalKey values matching files order
+    title: str = Form(...),
+    price: Decimal = Form(...),
+    is_free: bool = Form(False),
+    category_id: uuid.UUID | None = Form(None),
+    thumbnail: UploadFile | None = File(None),
+    db: AsyncSession = Depends(get_db),
+    producer=Depends(require_producer),
+):
+    from app.exceptions import AppError
+
+    parsed_keys = [k.strip() for k in keys.split(",") if k.strip()]
+    try:
+        validated_keys = [MusicalKey(k) for k in parsed_keys]
+    except ValueError as e:
+        raise AppError(f"Invalid key value: {e}", status_code=422)
+
+    if len(files) != len(validated_keys):
+        raise AppError(
+            f"Got {len(files)} file(s) but {len(validated_keys)} key(s); counts must match",
+            status_code=422,
+        )
+
+    drones = await drone_service.bulk_create_drones(
+        db, files, validated_keys, title, price, is_free, category_id, producer.id, thumbnail=thumbnail
+    )
+    from app.tasks.upload_tasks import process_drone_upload
+    for drone in drones:
+        process_drone_upload.delay(str(drone.id))
+
+    return success(
+        [DronePadResponse.model_validate(d).model_dump() for d in drones],
+        f"{len(drones)} drone pad(s) upload queued",
+    )
+
+
+@router.get("/drones/bulk/status")
+async def bulk_drone_upload_status(
+    ids: str,  # comma-separated drone UUIDs
+    db: AsyncSession = Depends(get_db),
+    producer=Depends(require_producer),
+):
+    from app.exceptions import AppError
+    parsed_ids = [i.strip() for i in ids.split(",") if i.strip()]
+    try:
+        validated_ids = [uuid.UUID(i) for i in parsed_ids]
+    except ValueError:
+        raise AppError("Invalid UUID in ids", status_code=422)
+
+    drones = await drone_service.get_drones_by_ids(db, validated_ids)
+    return success([{"id": str(d.id), "key": d.key, "status": d.status} for d in drones])
+
+
 @router.get("/drones/{drone_id}/status")
 async def drone_upload_status(
     drone_id: uuid.UUID,
@@ -289,6 +345,17 @@ async def drone_upload_status(
 ):
     drone = await drone_service.get_drone(db, drone_id)
     return success({"id": str(drone.id), "status": drone.status})
+
+
+@router.put("/drones/{drone_id}")
+async def update_drone(
+    drone_id: uuid.UUID,
+    body: DronePadUpdate,
+    db: AsyncSession = Depends(get_db),
+    admin=Depends(require_admin),
+):
+    drone = await drone_service.update_drone(db, drone_id, body)
+    return success(DronePadResponse.model_validate(drone).model_dump(), "Drone pad updated")
 
 
 @router.delete("/drones/{drone_id}")

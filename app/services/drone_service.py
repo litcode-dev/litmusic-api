@@ -7,7 +7,7 @@ from fastapi import UploadFile
 from app.models.drone_pad import DronePad, DronePadCategory
 from app.models.purchase import Purchase
 from app.models.user import User
-from app.schemas.drone_pad import DronePadCreate, DronePadCategoryCreate, DronePadFilter
+from app.schemas.drone_pad import DronePadCreate, DronePadUpdate, DronePadCategoryCreate, DronePadFilter
 from app.exceptions import NotFoundError, EntitlementError
 from app.services import s3_service
 from app.utils.audio_validator import validate_wav_upload
@@ -120,6 +120,11 @@ async def list_drones(db: AsyncSession, filters: DronePadFilter) -> tuple[list[D
     return list(result.all()), total or 0
 
 
+async def get_drones_by_ids(db: AsyncSession, drone_ids: list[uuid.UUID]) -> list[DronePad]:
+    result = await db.scalars(select(DronePad).where(DronePad.id.in_(drone_ids)))
+    return list(result.all())
+
+
 async def check_download_entitlement(
     db: AsyncSession, user: User, drone: DronePad
 ) -> None:
@@ -133,6 +138,68 @@ async def check_download_entitlement(
     )
     if not purchase:
         raise EntitlementError()
+
+
+async def bulk_create_drones(
+    db: AsyncSession,
+    files: list[UploadFile],
+    keys: list,  # list[MusicalKey]
+    title: str,
+    price,
+    is_free: bool,
+    category_id: uuid.UUID | None,
+    created_by: uuid.UUID,
+    thumbnail: UploadFile | None = None,
+) -> list[DronePad]:
+    if len(files) != len(keys):
+        from app.exceptions import AppError
+        raise AppError("Number of files must match number of keys", status_code=422)
+
+    thumb_key = None
+    if thumbnail:
+        thumb_bytes = await thumbnail.read()
+        content_type = thumbnail.content_type or "image/jpeg"
+        ext = content_type.split("/")[-1] if "/" in content_type else "jpg"
+        # Use a shared thumbnail keyed on a new UUID
+        shared_thumb_id = str(uuid.uuid4())
+        thumb_key = s3_service.s3_key_for_drone_thumbnail(shared_thumb_id, ext)
+        await s3_service.upload_bytes(thumb_key, thumb_bytes, content_type)
+
+    drones = []
+    for file, key in zip(files, keys):
+        wav_bytes = await validate_wav_upload(file)
+        drone_id = str(uuid.uuid4())
+        raw_key = s3_service.s3_key_for_raw_drone(drone_id)
+        await s3_service.upload_bytes(raw_key, wav_bytes, "audio/wav")
+
+        drone = DronePad(
+            id=uuid.UUID(drone_id),
+            title=title,
+            key=key,
+            duration=0,
+            price=price,
+            is_free=is_free,
+            category_id=category_id,
+            thumbnail_s3_key=thumb_key,
+            created_by=created_by,
+            status="processing",
+        )
+        db.add(drone)
+        drones.append(drone)
+
+    await db.commit()
+    for drone in drones:
+        await db.refresh(drone)
+    return drones
+
+
+async def update_drone(db: AsyncSession, drone_id: uuid.UUID, data: DronePadUpdate) -> DronePad:
+    drone = await get_drone(db, drone_id)
+    for field, value in data.model_dump(exclude_none=True).items():
+        setattr(drone, field, value)
+    await db.commit()
+    await db.refresh(drone)
+    return drone
 
 
 async def delete_drone(db: AsyncSession, drone_id: uuid.UUID) -> None:
