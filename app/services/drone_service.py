@@ -108,6 +108,8 @@ async def list_drones(db: AsyncSession, filters: DronePadFilter) -> tuple[list[D
         q = q.where(DronePad.key == filters.key)
     if filters.is_free is not None:
         q = q.where(DronePad.is_free == filters.is_free)
+    if filters.category_id is not None:
+        q = q.where(DronePad.category_id == filters.category_id)
 
     count_q = select(func.count()).select_from(q.subquery())
     total = await db.scalar(count_q)
