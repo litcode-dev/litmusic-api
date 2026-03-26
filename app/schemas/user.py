@@ -28,7 +28,6 @@ class UserResponse(BaseModel):
     full_name: str
     role: UserRole
     avatar_url: str | None = None
-    stripe_customer_id: str | None
     created_at: datetime
 
     model_config = {"from_attributes": True}
