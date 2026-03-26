@@ -9,7 +9,7 @@ from app.middleware.auth_middleware import get_current_user
 from app.services import drone_service, s3_service, cache_service
 from app.schemas.drone_pad import DronePadFilter, DronePadResponse, DronePadCategoryResponse
 from app.schemas.common import success
-from app.models.drone_pad import DroneType, MusicalKey
+from app.models.drone_pad import MusicalKey
 
 router = APIRouter(prefix="/drones", tags=["drones"])
 
@@ -40,14 +40,13 @@ async def get_drone_category(category_id: uuid.UUID, db: AsyncSession = Depends(
 @router.get("")
 async def list_drones(
     key: MusicalKey | None = None,
-    drone_type: DroneType | None = None,
     is_free: bool | None = None,
     page: int = 1,
     page_size: int = 50,
     db: AsyncSession = Depends(get_db),
 ):
     filters = DronePadFilter(
-        key=key, drone_type=drone_type, is_free=is_free,
+        key=key, is_free=is_free,
         page=page, page_size=page_size,
     )
     drones, total = await drone_service.list_drones(db, filters)

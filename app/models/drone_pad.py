@@ -11,15 +11,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 
-class DroneType(str, enum.Enum):
-    warm = "warm"
-    shimmer = "shimmer"
-    dark = "dark"
-    bright = "bright"
-    orchestral = "orchestral"
-    ethereal = "ethereal"
-
-
 class MusicalKey(str, enum.Enum):
     C = "C"
     C_sharp = "C#"
@@ -52,7 +43,6 @@ class DronePad(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
-    drone_type: Mapped[DroneType] = mapped_column(SAEnum(DroneType), nullable=False, index=True)
     key: Mapped[MusicalKey] = mapped_column(
         SAEnum(MusicalKey, values_callable=lambda obj: [e.value for e in obj]),
         nullable=False,

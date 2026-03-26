@@ -80,7 +80,6 @@ async def create_drone(
     drone = DronePad(
         id=uuid.UUID(drone_id),
         title=data.title,
-        drone_type=data.drone_type,
         key=data.key,
         duration=0,
         price=data.price,
@@ -107,15 +106,13 @@ async def list_drones(db: AsyncSession, filters: DronePadFilter) -> tuple[list[D
     q = select(DronePad)
     if filters.key:
         q = q.where(DronePad.key == filters.key)
-    if filters.drone_type:
-        q = q.where(DronePad.drone_type == filters.drone_type)
     if filters.is_free is not None:
         q = q.where(DronePad.is_free == filters.is_free)
 
     count_q = select(func.count()).select_from(q.subquery())
     total = await db.scalar(count_q)
 
-    q = q.order_by(DronePad.key, DronePad.drone_type)
+    q = q.order_by(DronePad.key)
     q = q.offset((filters.page - 1) * filters.page_size).limit(filters.page_size)
     result = await db.scalars(q)
     return list(result.all()), total or 0

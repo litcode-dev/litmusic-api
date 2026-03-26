@@ -13,7 +13,7 @@ from app.schemas.drum_kit import DrumKitCreate, DrumKitResponse, DrumKitCategory
 from app.schemas.user import UserResponse
 from app.schemas.common import success
 from app.models.loop import Genre, TempoFeel
-from app.models.drone_pad import DroneType, MusicalKey
+from app.models.drone_pad import MusicalKey
 from app.models.drum_kit import DrumKit, DrumKitCategory
 from app.models.user import User, UserRole
 from app.exceptions import NotFoundError
@@ -267,7 +267,6 @@ async def upload_drone(
     file: UploadFile = File(...),
     thumbnail: UploadFile | None = File(None),
     title: str = Form(...),
-    drone_type: DroneType = Form(...),
     key: MusicalKey = Form(...),
     price: Decimal = Form(...),
     is_free: bool = Form(False),
@@ -275,7 +274,7 @@ async def upload_drone(
     db: AsyncSession = Depends(get_db),
     producer=Depends(require_producer),
 ):
-    data = DronePadCreate(title=title, drone_type=drone_type, key=key, price=price, is_free=is_free, category_id=category_id)
+    data = DronePadCreate(title=title, key=key, price=price, is_free=is_free, category_id=category_id)
     drone = await drone_service.create_drone(db, file, data, producer.id, thumbnail=thumbnail)
     from app.tasks.upload_tasks import process_drone_upload
     process_drone_upload.delay(str(drone.id))
