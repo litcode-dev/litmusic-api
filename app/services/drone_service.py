@@ -151,6 +151,8 @@ async def bulk_create_drones(
     created_by: uuid.UUID,
     thumbnail: UploadFile | None = None,
 ) -> list[DronePad]:
+    import asyncio
+
     if len(files) != len(keys):
         from app.exceptions import AppError
         raise AppError("Number of files must match number of keys", status_code=422)
@@ -160,18 +162,22 @@ async def bulk_create_drones(
         thumb_bytes = await thumbnail.read()
         content_type = thumbnail.content_type or "image/jpeg"
         ext = content_type.split("/")[-1] if "/" in content_type else "jpg"
-        # Use a shared thumbnail keyed on a new UUID
         shared_thumb_id = str(uuid.uuid4())
         thumb_key = s3_service.s3_key_for_drone_thumbnail(shared_thumb_id, ext)
         await s3_service.upload_bytes(thumb_key, thumb_bytes, content_type)
 
-    drones = []
-    for file, key in zip(files, keys):
+    async def _validate_and_upload(file: UploadFile) -> tuple[str, str]:
+        """Returns (drone_id, raw_s3_key) after uploading raw WAV to S3."""
         wav_bytes = await validate_wav_upload(file)
         drone_id = str(uuid.uuid4())
         raw_key = s3_service.s3_key_for_raw_drone(drone_id)
         await s3_service.upload_bytes(raw_key, wav_bytes, "audio/wav")
+        return drone_id, raw_key
 
+    results = await asyncio.gather(*[_validate_and_upload(f) for f in files])
+
+    drones = []
+    for (drone_id, _raw_key), key in zip(results, keys):
         drone = DronePad(
             id=uuid.UUID(drone_id),
             title=title,
