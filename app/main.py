@@ -23,11 +23,19 @@ structlog.configure(
 
 settings = get_settings()
 
+_servers = [{"url": settings.api_base_url, "description": "Production"}] if settings.api_base_url else None
+
 app = FastAPI(
     title="LitMusic API",
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    servers=_servers,
+    swagger_ui_parameters={
+        "persistAuthorization": True,
+        "tryItOutEnabled": True,
+        "displayRequestDuration": True,
+    },
 )
 
 # Rate limiter

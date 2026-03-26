@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     # App
     app_env: str = "development"
     secret_key: str
+    api_base_url: str = ""  # e.g. https://litmusic-api-production.up.railway.app
     # Stored as a raw string so pydantic-settings doesn't try to JSON-decode it.
     # Accepts comma-separated ("a,b") or JSON array ('["a","b"]') — parsed by parse_allowed_origins().
     allowed_origins: str = "http://localhost:3000"
