@@ -1,7 +1,7 @@
 import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload  # noqa: F401 (used below)
 from fastapi import UploadFile
 
 from app.models.drone_pad import DronePad, DronePadCategory
@@ -91,12 +91,15 @@ async def create_drone(
     )
     db.add(drone)
     await db.commit()
-    await db.refresh(drone)
-    return drone
+    return await get_drone(db, uuid.UUID(drone_id))
 
 
 async def get_drone(db: AsyncSession, drone_id: uuid.UUID) -> DronePad:
-    drone = await db.get(DronePad, drone_id)
+    drone = await db.scalar(
+        select(DronePad)
+        .options(selectinload(DronePad.category))
+        .where(DronePad.id == drone_id)
+    )
     if not drone:
         raise NotFoundError(f"Drone pad {drone_id} not found")
     return drone
@@ -114,6 +117,7 @@ async def list_drones(db: AsyncSession, filters: DronePadFilter) -> tuple[list[D
     count_q = select(func.count()).select_from(q.subquery())
     total = await db.scalar(count_q)
 
+    q = q.options(selectinload(DronePad.category))
     q = q.order_by(DronePad.key)
     q = q.offset((filters.page - 1) * filters.page_size).limit(filters.page_size)
     result = await db.scalars(q)
@@ -194,9 +198,13 @@ async def bulk_create_drones(
         drones.append(drone)
 
     await db.commit()
-    for drone in drones:
-        await db.refresh(drone)
-    return drones
+    loaded = await db.scalars(
+        select(DronePad)
+        .options(selectinload(DronePad.category))
+        .where(DronePad.id.in_([d.id for d in drones]))
+        .order_by(DronePad.key)
+    )
+    return list(loaded.all())
 
 
 async def update_drone(db: AsyncSession, drone_id: uuid.UUID, data: DronePadUpdate) -> DronePad:
@@ -204,8 +212,7 @@ async def update_drone(db: AsyncSession, drone_id: uuid.UUID, data: DronePadUpda
     for field, value in data.model_dump(exclude_none=True).items():
         setattr(drone, field, value)
     await db.commit()
-    await db.refresh(drone)
-    return drone
+    return await get_drone(db, drone_id)
 
 
 async def delete_drone(db: AsyncSession, drone_id: uuid.UUID) -> None:

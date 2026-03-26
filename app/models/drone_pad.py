@@ -64,4 +64,4 @@ class DronePad(Base):
     created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    category: Mapped["DronePadCategory | None"] = relationship("DronePadCategory", back_populates="drone_pads")
+    category: Mapped["DronePadCategory | None"] = relationship("DronePadCategory", back_populates="drone_pads", lazy="noload")
