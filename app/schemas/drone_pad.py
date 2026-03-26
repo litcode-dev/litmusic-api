@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 from pydantic import BaseModel, model_validator, Field
-from app.models.drone_pad import DroneType, MusicalKey
+from app.models.drone_pad import MusicalKey
 
 
 class DronePadCategoryCreate(BaseModel):
@@ -21,7 +21,6 @@ class DronePadCategoryResponse(BaseModel):
 
 class DronePadCreate(BaseModel):
     title: str
-    drone_type: DroneType
     key: MusicalKey
     price: Decimal
     is_free: bool = False
@@ -31,7 +30,6 @@ class DronePadCreate(BaseModel):
 class DronePadResponse(BaseModel):
     id: uuid.UUID
     title: str
-    drone_type: DroneType
     key: MusicalKey
     duration: int
     price: Decimal
@@ -60,7 +58,6 @@ class DronePadResponse(BaseModel):
 
 class DronePadFilter(BaseModel):
     key: MusicalKey | None = None
-    drone_type: DroneType | None = None
     is_free: bool | None = None
     page: int = 1
     page_size: int = 50
