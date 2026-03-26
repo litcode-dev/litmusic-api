@@ -1,6 +1,21 @@
 import asyncio
+import boto3
 from celery.exceptions import MaxRetriesExceededError
 from app.tasks.celery_app import celery_app
+
+
+def _s3() -> boto3.client:
+    """Return a module-level S3 client, created once per worker process."""
+    if not hasattr(_s3, "_client"):
+        from app.config import get_settings
+        s = get_settings()
+        _s3._client = boto3.client(
+            "s3",
+            aws_access_key_id=s.aws_access_key_id,
+            aws_secret_access_key=s.aws_secret_access_key,
+            region_name=s.aws_region,
+        )
+    return _s3._client
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=10)
@@ -8,7 +23,6 @@ def process_loop_upload(self, loop_id: str):
     async def _run():
         import uuid
         import io
-        import boto3
         import soundfile as sf
         from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
         from sqlalchemy.pool import NullPool
@@ -26,13 +40,7 @@ def process_loop_upload(self, loop_id: str):
         db_url = settings.database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
         engine = create_async_engine(db_url, poolclass=NullPool)
         SessionLocal = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
-
-        s3 = boto3.client(
-            "s3",
-            aws_access_key_id=settings.aws_access_key_id,
-            aws_secret_access_key=settings.aws_secret_access_key,
-            region_name=settings.aws_region,
-        )
+        s3 = _s3()
 
         try:
             async with SessionLocal() as db:
@@ -86,7 +94,6 @@ def process_drum_sample_upload(self, sample_id: str):
     async def _run():
         import uuid
         import io
-        import boto3
         import soundfile as sf
         from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
         from sqlalchemy.pool import NullPool
@@ -104,13 +111,7 @@ def process_drum_sample_upload(self, sample_id: str):
         db_url = settings.database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
         engine = create_async_engine(db_url, poolclass=NullPool)
         SessionLocal = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
-
-        s3 = boto3.client(
-            "s3",
-            aws_access_key_id=settings.aws_access_key_id,
-            aws_secret_access_key=settings.aws_secret_access_key,
-            region_name=settings.aws_region,
-        )
+        s3 = _s3()
 
         try:
             async with SessionLocal() as db:
@@ -164,7 +165,6 @@ def process_drone_upload(self, drone_id: str):
     async def _run():
         import uuid
         import io
-        import boto3
         import soundfile as sf
         from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
         from sqlalchemy.pool import NullPool
@@ -182,13 +182,7 @@ def process_drone_upload(self, drone_id: str):
         db_url = settings.database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
         engine = create_async_engine(db_url, poolclass=NullPool)
         SessionLocal = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
-
-        s3 = boto3.client(
-            "s3",
-            aws_access_key_id=settings.aws_access_key_id,
-            aws_secret_access_key=settings.aws_secret_access_key,
-            region_name=settings.aws_region,
-        )
+        s3 = _s3()
 
         try:
             async with SessionLocal() as db:

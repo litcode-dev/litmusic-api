@@ -321,12 +321,30 @@ async def bulk_upload_drones(
     )
 
     from app.services import s3_service as _s3
+    import structlog as _structlog
 
     async def _upload_and_queue(drone_id: str, wav_bytes: bytes) -> None:
-        raw_key = _s3.s3_key_for_raw_drone(drone_id)
-        await _s3.upload_bytes(raw_key, wav_bytes, "audio/wav")
-        from app.tasks.upload_tasks import process_drone_upload
-        process_drone_upload.delay(drone_id)
+        try:
+            raw_key = _s3.s3_key_for_raw_drone(drone_id)
+            await _s3.upload_bytes(raw_key, wav_bytes, "audio/wav")
+            from app.tasks.upload_tasks import process_drone_upload
+            process_drone_upload.delay(drone_id)
+        except Exception as exc:
+            _structlog.get_logger().error(
+                "bulk_drone_upload_failed", drone_id=drone_id, error=str(exc)
+            )
+            try:
+                from app.database import AsyncSessionLocal
+                from app.models.drone_pad import DronePad as _DronePad
+                async with AsyncSessionLocal() as _db:
+                    _drone = await _db.get(_DronePad, uuid.UUID(drone_id))
+                    if _drone:
+                        _drone.status = "failed"
+                        await _db.commit()
+            except Exception as db_exc:
+                _structlog.get_logger().error(
+                    "bulk_drone_status_update_failed", drone_id=drone_id, error=str(db_exc)
+                )
 
     for drone, (drone_id, wav_bytes) in zip(drones, uploads):
         background_tasks.add_task(_upload_and_queue, str(drone.id), wav_bytes)
