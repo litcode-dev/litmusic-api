@@ -23,7 +23,7 @@ structlog.configure(
 
 settings = get_settings()
 
-_servers = [{"url": settings.api_base_url, "description": "Production"}] if settings.api_base_url else None
+_servers = [{"url": settings.api_base_url, "description": "Production"}] if settings.api_base_url else [{"url": "/", "description": "Current server"}]
 
 app = FastAPI(
     title="LitMusic API",
