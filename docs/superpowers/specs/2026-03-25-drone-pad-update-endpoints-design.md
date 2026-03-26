@@ -21,7 +21,6 @@ Content-Type: application/json
 
 **Request body** (`DronePadUpdate` — all fields optional):
 - `title: str | None`
-- `drone_type: DroneType | None`
 - `key: MusicalKey | None`
 - `price: Decimal | None`
 - `is_free: bool | None`
@@ -67,7 +66,6 @@ Content-Type: multipart/form-data
 ```python
 class DronePadUpdate(BaseModel):
     title: str | None = None
-    drone_type: DroneType | None = None
     key: MusicalKey | None = None
     price: Decimal | None = None
     is_free: bool | None = None

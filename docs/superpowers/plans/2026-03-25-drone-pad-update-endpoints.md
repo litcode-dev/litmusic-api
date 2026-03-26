@@ -36,7 +36,7 @@ import pytest
 import uuid
 from decimal import Decimal
 from unittest.mock import patch, AsyncMock, MagicMock
-from app.models.drone_pad import DronePad, DroneType, MusicalKey
+from app.models.drone_pad import DronePad, MusicalKey
 from app.models.user import User, UserRole
 from app.services.auth_service import hash_password, create_access_token
 
@@ -55,7 +55,7 @@ async def _create_admin(db):
 async def _create_drone(db, user_id, status="ready"):
     drone = DronePad(
         id=uuid.uuid4(), title="Test Drone",
-        drone_type=DroneType.warm, key=MusicalKey.C,
+        key=MusicalKey.C,
         duration=30, price=Decimal("4.99"), is_free=False,
         file_s3_key="drones/enc/test.wav",
         aes_key="aabbcc", aes_iv="ddeeff",
@@ -95,7 +95,6 @@ Add after the `DronePadCreate` class (around line 29):
 ```python
 class DronePadUpdate(BaseModel):
     title: str | None = None
-    drone_type: DroneType | None = None
     key: MusicalKey | None = None
     price: Decimal | None = None
     is_free: bool | None = None
