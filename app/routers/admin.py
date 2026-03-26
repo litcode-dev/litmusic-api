@@ -234,10 +234,14 @@ async def create_drone_category(
     db: AsyncSession = Depends(get_db),
     producer=Depends(require_producer),
 ):
+    import structlog as _structlog
     category = await drone_service.create_category(db, body, producer.id)
-    await cache_service.delete("drone:categories")
-    data = DronePadCategoryResponse.model_validate(category).model_dump()
-    await cache_service.set(f"drone:category:{category.id}", data, cache_service.TTL_DRONE_CATEGORIES)
+    data = DronePadCategoryResponse.model_validate(category).model_dump(mode="json")
+    try:
+        await cache_service.delete("drone:categories")
+        await cache_service.set(f"drone:category:{category.id}", data, cache_service.TTL_DRONE_CATEGORIES)
+    except Exception as e:
+        _structlog.get_logger().warning("cache_invalidation_failed", endpoint="create_drone_category", error=str(e))
     return success(data, "Category created")
 
 
@@ -256,9 +260,13 @@ async def delete_drone_category(
     db: AsyncSession = Depends(get_db),
     admin=Depends(require_admin),
 ):
+    import structlog as _structlog
     await drone_service.delete_category(db, category_id)
-    await cache_service.delete("drone:categories")
-    await cache_service.delete(f"drone:category:{category_id}")
+    try:
+        await cache_service.delete("drone:categories")
+        await cache_service.delete(f"drone:category:{category_id}")
+    except Exception as e:
+        _structlog.get_logger().warning("cache_invalidation_failed", endpoint="delete_drone_category", error=str(e))
     return success(message="Category deleted")
 
 
@@ -395,8 +403,12 @@ async def create_drum_kit(
         tags=[t.strip() for t in tags.split(",") if t.strip()],
         is_free=is_free,
     )
+    import structlog as _structlog
     kit = await drum_kit_service.create_drum_kit(db, data, producer.id, thumbnail=thumbnail)
-    await cache_service.delete_pattern("drum_kit:list:*")
+    try:
+        await cache_service.delete_pattern("drum_kit:list:*")
+    except Exception as e:
+        _structlog.get_logger().warning("cache_invalidation_failed", endpoint="create_drum_kit", error=str(e))
     return success(DrumKitResponse.model_validate(kit).model_dump(), "Drum kit created")
 
 
@@ -442,8 +454,11 @@ async def create_drum_kit_category(
         .where(DrumKitCategory.id == category.id)
     )
     category = result.scalar_one()
-    # Invalidate detail cache – the kit now has a new category
-    await cache_service.delete(f"drum_kit:detail:{kit_id}")
+    import structlog as _structlog
+    try:
+        await cache_service.delete(f"drum_kit:detail:{kit_id}")
+    except Exception as e:
+        _structlog.get_logger().warning("cache_invalidation_failed", endpoint="create_drum_kit_category", error=str(e))
     return success(DrumKitCategoryResponse.model_validate(category).model_dump(), "Category created, samples queued for processing")
 
 
@@ -454,8 +469,12 @@ async def delete_drum_kit_category(
     db: AsyncSession = Depends(get_db),
     admin=Depends(require_admin),
 ):
+    import structlog as _structlog
     await drum_kit_service.delete_category(db, kit_id, category_id)
-    await cache_service.delete(f"drum_kit:detail:{kit_id}")
+    try:
+        await cache_service.delete(f"drum_kit:detail:{kit_id}")
+    except Exception as e:
+        _structlog.get_logger().warning("cache_invalidation_failed", endpoint="delete_drum_kit_category", error=str(e))
     return success(message="Category deleted")
 
 
@@ -465,7 +484,11 @@ async def delete_drum_kit(
     db: AsyncSession = Depends(get_db),
     admin=Depends(require_admin),
 ):
+    import structlog as _structlog
     await drum_kit_service.delete_drum_kit(db, kit_id)
-    await cache_service.delete(f"drum_kit:detail:{kit_id}")
-    await cache_service.delete_pattern("drum_kit:list:*")
+    try:
+        await cache_service.delete(f"drum_kit:detail:{kit_id}")
+        await cache_service.delete_pattern("drum_kit:list:*")
+    except Exception as e:
+        _structlog.get_logger().warning("cache_invalidation_failed", endpoint="delete_drum_kit", error=str(e))
     return success(message="Drum kit deleted")
