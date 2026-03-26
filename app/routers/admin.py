@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, UploadFile, File, Form
+from fastapi import APIRouter, BackgroundTasks, Depends, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
@@ -283,6 +283,7 @@ async def upload_drone(
 
 @router.post("/drones/bulk")
 async def bulk_upload_drones(
+    background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(...),
     keys: str = Form(...),  # comma-separated MusicalKey values matching files order
     title: str = Form(...),
@@ -307,12 +308,18 @@ async def bulk_upload_drones(
             status_code=422,
         )
 
-    drones = await drone_service.bulk_create_drones(
+    drones, uploads, _thumb_key = await drone_service.bulk_create_drones(
         db, files, validated_keys, title, price, is_free, category_id, producer.id, thumbnail=thumbnail
     )
-    from app.tasks.upload_tasks import process_drone_upload
-    for drone in drones:
-        process_drone_upload.delay(str(drone.id))
+
+    async def _upload_and_queue(drone_id: str, wav_bytes: bytes) -> None:
+        raw_key = drone_service.s3_service.s3_key_for_raw_drone(drone_id)
+        await drone_service.s3_service.upload_bytes(raw_key, wav_bytes, "audio/wav")
+        from app.tasks.upload_tasks import process_drone_upload
+        process_drone_upload.delay(drone_id)
+
+    for drone, (drone_id, wav_bytes) in zip(drones, uploads):
+        background_tasks.add_task(_upload_and_queue, str(drone.id), wav_bytes)
 
     return success(
         [DronePadResponse.model_validate(d).model_dump() for d in drones],

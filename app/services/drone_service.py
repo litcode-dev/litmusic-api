@@ -154,7 +154,12 @@ async def bulk_create_drones(
     category_id: uuid.UUID | None,
     created_by: uuid.UUID,
     thumbnail: UploadFile | None = None,
-) -> list[DronePad]:
+) -> tuple[list[DronePad], list[tuple[str, bytes]], str | None]:
+    """
+    Validate files and create DB records synchronously.
+    Returns (drones, [(drone_id, wav_bytes), ...], thumb_key) so the
+    caller can push S3 uploads to a background task and respond immediately.
+    """
     import asyncio
 
     if len(files) != len(keys):
@@ -170,18 +175,15 @@ async def bulk_create_drones(
         thumb_key = s3_service.s3_key_for_drone_thumbnail(shared_thumb_id, ext)
         await s3_service.upload_bytes(thumb_key, thumb_bytes, content_type)
 
-    async def _validate_and_upload(file: UploadFile) -> tuple[str, str]:
-        """Returns (drone_id, raw_s3_key) after uploading raw WAV to S3."""
-        wav_bytes = await validate_wav_upload(file)
-        drone_id = str(uuid.uuid4())
-        raw_key = s3_service.s3_key_for_raw_drone(drone_id)
-        await s3_service.upload_bytes(raw_key, wav_bytes, "audio/wav")
-        return drone_id, raw_key
-
-    results = await asyncio.gather(*[_validate_and_upload(f) for f in files])
+    # Validate all files in parallel — fast (CPU-bound sf.read in thread pool)
+    validated: list[bytes] = list(
+        await asyncio.gather(*[validate_wav_upload(f) for f in files])
+    )
 
     drones = []
-    for (drone_id, _raw_key), key in zip(results, keys):
+    uploads: list[tuple[str, bytes]] = []
+    for wav_bytes, key in zip(validated, keys):
+        drone_id = str(uuid.uuid4())
         drone = DronePad(
             id=uuid.UUID(drone_id),
             title=title,
@@ -196,6 +198,7 @@ async def bulk_create_drones(
         )
         db.add(drone)
         drones.append(drone)
+        uploads.append((drone_id, wav_bytes))
 
     await db.commit()
     loaded = await db.scalars(
@@ -204,7 +207,7 @@ async def bulk_create_drones(
         .where(DronePad.id.in_([d.id for d in drones]))
         .order_by(DronePad.key)
     )
-    return list(loaded.all())
+    return list(loaded.all()), uploads, thumb_key
 
 
 async def update_drone(db: AsyncSession, drone_id: uuid.UUID, data: DronePadUpdate) -> DronePad:
