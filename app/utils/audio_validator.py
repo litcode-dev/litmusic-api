@@ -1,4 +1,5 @@
 import io
+import asyncio
 import soundfile as sf
 from fastapi import UploadFile
 from app.exceptions import AppError
@@ -7,14 +8,10 @@ MAX_FILE_SIZE_BYTES = 30 * 1024 * 1024  # 30 MB
 ALLOWED_SAMPLE_RATES = {44100, 48000}
 
 
-async def validate_wav_upload(file: UploadFile) -> bytes:
-    """Read, size-check, and format-validate an uploaded WAV. Returns raw bytes."""
-    content = await file.read()
-    if len(content) > MAX_FILE_SIZE_BYTES:
-        raise AppError("File exceeds 30 MB limit", status_code=413)
-
+def _validate_wav_bytes(content: bytes) -> None:
+    """CPU-bound WAV validation — runs in a thread pool via asyncio.to_thread."""
     try:
-        audio, sample_rate = sf.read(io.BytesIO(content))
+        _, sample_rate = sf.read(io.BytesIO(content))
     except Exception:
         raise AppError("Invalid audio file — must be a valid WAV", status_code=422)
 
@@ -23,4 +20,12 @@ async def validate_wav_upload(file: UploadFile) -> bytes:
             f"Sample rate must be 44100 or 48000 Hz, got {sample_rate} Hz", status_code=422
         )
 
+
+async def validate_wav_upload(file: UploadFile) -> bytes:
+    """Read, size-check, and format-validate an uploaded WAV. Returns raw bytes."""
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE_BYTES:
+        raise AppError("File exceeds 30 MB limit", status_code=413)
+
+    await asyncio.to_thread(_validate_wav_bytes, content)
     return content

@@ -4,21 +4,19 @@ from app.config import get_settings
 
 settings = get_settings()
 
-
-def _get_client():
-    return boto3.client(
-        "s3",
-        aws_access_key_id=settings.aws_access_key_id,
-        aws_secret_access_key=settings.aws_secret_access_key,
-        region_name=settings.aws_region,
-    )
+# boto3 clients are thread-safe — reuse one instance to avoid per-call construction overhead
+_client = boto3.client(
+    "s3",
+    aws_access_key_id=settings.aws_access_key_id,
+    aws_secret_access_key=settings.aws_secret_access_key,
+    region_name=settings.aws_region,
+)
 
 
 async def upload_bytes(key: str, data: bytes, content_type: str = "application/octet-stream") -> str:
     """Upload bytes to S3 without blocking the event loop. Returns the S3 key."""
     def _upload():
-        client = _get_client()
-        client.put_object(
+        _client.put_object(
             Bucket=settings.s3_bucket_name,
             Key=key,
             Body=data,
@@ -32,8 +30,7 @@ async def upload_bytes(key: str, data: bytes, content_type: str = "application/o
 async def generate_presigned_url(key: str, expiry_seconds: int = 900) -> str:
     """Generate a pre-signed GET URL valid for expiry_seconds (default 15 min)."""
     def _presign():
-        client = _get_client()
-        return client.generate_presigned_url(
+        return _client.generate_presigned_url(
             "get_object",
             Params={"Bucket": settings.s3_bucket_name, "Key": key},
             ExpiresIn=expiry_seconds,
@@ -57,8 +54,7 @@ async def get_download_url(key: str, expiry_seconds: int = 900) -> str:
 
 async def delete_object(key: str) -> None:
     def _delete():
-        client = _get_client()
-        client.delete_object(Bucket=settings.s3_bucket_name, Key=key)
+        _client.delete_object(Bucket=settings.s3_bucket_name, Key=key)
 
     await asyncio.to_thread(_delete)
 
