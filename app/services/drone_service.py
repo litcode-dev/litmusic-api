@@ -63,6 +63,8 @@ async def create_drone(
     created_by: uuid.UUID,
     thumbnail: UploadFile | None = None,
 ) -> DronePad:
+    if data.category_id is not None:
+        await get_category(db, data.category_id)
     wav_bytes = await validate_wav_upload(file)
 
     drone_id = str(uuid.uuid4())
@@ -165,6 +167,9 @@ async def bulk_create_drones(
     if len(files) != len(keys):
         from app.exceptions import AppError
         raise AppError("Number of files must match number of keys", status_code=422)
+
+    if category_id is not None:
+        await get_category(db, category_id)
 
     thumb_key = None
     if thumbnail:
