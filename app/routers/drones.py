@@ -37,6 +37,16 @@ async def get_drone_category(category_id: uuid.UUID, db: AsyncSession = Depends(
     return success(data)
 
 
+@router.get("/categories/{category_id}/download")
+async def download_drones_by_category(
+    category_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    items = await drone_service.get_category_downloads(db, user, category_id)
+    return success({"items": items, "total": len(items)})
+
+
 @router.get("")
 async def list_drones(
     key: MusicalKey | None = None,
