@@ -346,8 +346,9 @@ async def bulk_upload_drones(
                     "bulk_drone_status_update_failed", drone_id=drone_id, error=str(db_exc)
                 )
 
-    for drone, (drone_id, wav_bytes) in zip(drones, uploads):
-        background_tasks.add_task(_upload_and_queue, str(drone.id), wav_bytes)
+    uploads_map = {drone_id: wav_bytes for drone_id, wav_bytes in uploads}
+    for drone in drones:
+        background_tasks.add_task(_upload_and_queue, str(drone.id), uploads_map[str(drone.id)])
 
     return success(
         [DronePadResponse.model_validate(d).model_dump() for d in drones],
