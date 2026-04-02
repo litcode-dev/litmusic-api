@@ -285,10 +285,12 @@ async def get_title_downloads(
     drones = list(await db.scalars(
         select(DronePad)
         .options(selectinload(DronePad.category))
-        .where(DronePad.title.ilike(title), DronePad.status == "ready")
+        .where(func.lower(DronePad.title) == title.lower(), DronePad.status == "ready")
         .order_by(DronePad.key)
     ))
 
+    # Raise 404 if no ready drones found. A title has no independent DB
+    # existence — if nothing is ready under that title, treat it as not found.
     if not drones:
         raise NotFoundError(f"No drone pads found with title '{title}'")
 

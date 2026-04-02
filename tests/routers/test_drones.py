@@ -117,3 +117,26 @@ async def test_download_by_title_excludes_unpurchased_paid_drone(client, db_sess
     data = resp.json()["data"]
     assert data["total"] == 0
     assert data["items"] == []
+
+
+@pytest.mark.asyncio
+async def test_download_by_title_increments_download_count(client, db_session):
+    from sqlalchemy import select as sa_select
+    user = await _create_user(db_session)
+    drone = await _create_drone(db_session, user.id, title="Count Test Pad", key=MusicalKey.C, is_free=True, status="ready")
+    drone.file_s3_key = "drones/count-key.wav"
+    await db_session.commit()
+
+    token = create_access_token({"sub": str(user.id), "role": user.role.value})
+    with patch(
+        "app.services.s3_service.get_download_url",
+        new=AsyncMock(return_value="https://signed.url/file.wav"),
+    ):
+        resp = await client.get(
+            "/api/v1/drones/titles/Count Test Pad/download",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    assert resp.status_code == 200
+
+    await db_session.refresh(drone)
+    assert drone.download_count == 1
