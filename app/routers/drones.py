@@ -64,6 +64,16 @@ async def list_drones_by_title(db: AsyncSession = Depends(get_db)):
     return success({"items": items, "total": len(items)})
 
 
+@router.get("/titles/{title}/download")
+async def download_drones_by_title(
+    title: str,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    items = await drone_service.get_title_downloads(db, user, title)
+    return success({"items": items, "total": len(items)})
+
+
 @router.get("")
 async def list_drones(
     key: MusicalKey | None = None,

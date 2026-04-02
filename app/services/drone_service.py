@@ -277,6 +277,50 @@ async def get_category_downloads(
     return results
 
 
+async def get_title_downloads(
+    db: AsyncSession,
+    user: User,
+    title: str,
+) -> list[dict]:
+    drones = list(await db.scalars(
+        select(DronePad)
+        .options(selectinload(DronePad.category))
+        .where(DronePad.title.ilike(title), DronePad.status == "ready")
+        .order_by(DronePad.key)
+    ))
+
+    if not drones:
+        raise NotFoundError(f"No drone pads found with title '{title}'")
+
+    purchased_ids = set(await db.scalars(
+        select(Purchase.drone_pad_id).where(
+            Purchase.user_id == user.id,
+            Purchase.drone_pad_id.in_([d.id for d in drones]),
+        )
+    ))
+
+    results = []
+    for drone in drones:
+        if not drone.is_free and drone.id not in purchased_ids:
+            continue
+        if not drone.file_s3_key:
+            continue
+        download_url = await s3_service.get_download_url(drone.file_s3_key, expiry_seconds=900)
+        drone.download_count += 1
+        results.append({
+            "drone_pad_id": str(drone.id),
+            "title": drone.title,
+            "key": drone.key,
+            "signed_url": download_url,
+            "aes_key": drone.aes_key,
+            "aes_iv": drone.aes_iv,
+            "expires_in_seconds": 900,
+        })
+
+    await db.commit()
+    return results
+
+
 async def update_drone(db: AsyncSession, drone_id: uuid.UUID, data: DronePadUpdate) -> DronePad:
     drone = await get_drone(db, drone_id)
     for field, value in data.model_dump(exclude_none=True).items():

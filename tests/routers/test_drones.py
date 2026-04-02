@@ -56,3 +56,64 @@ async def test_list_drones_by_title_excludes_processing(client, db_session):
     data = resp.json()["data"]
     titles = [item["title"] for item in data["items"]]
     assert "Cello Pad" not in titles
+
+
+@pytest.mark.asyncio
+async def test_download_by_title_returns_signed_urls(client, db_session):
+    user = await _create_user(db_session)
+    drone = await _create_drone(db_session, user.id, title="Dark Piano Pad", key=MusicalKey.C, is_free=True, status="ready")
+    drone.file_s3_key = "drones/fake-key.wav"
+    await db_session.commit()
+
+    token = create_access_token({"sub": str(user.id), "role": user.role.value})
+    with patch(
+        "app.services.s3_service.get_download_url",
+        new=AsyncMock(return_value="https://signed.url/file.wav"),
+    ):
+        resp = await client.get(
+            "/api/v1/drones/titles/Dark Piano Pad/download",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["total"] == 1
+    assert data["items"][0]["title"] == "Dark Piano Pad"
+    assert data["items"][0]["signed_url"] == "https://signed.url/file.wav"
+    assert data["items"][0]["expires_in_seconds"] == 900
+
+
+@pytest.mark.asyncio
+async def test_download_by_title_requires_auth(client):
+    resp = await client.get("/api/v1/drones/titles/Dark Piano Pad/download")
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_download_by_title_not_found(client, db_session):
+    user = await _create_user(db_session)
+    token = create_access_token({"sub": str(user.id), "role": user.role.value})
+    resp = await client.get(
+        "/api/v1/drones/titles/NonExistentTitle/download",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_download_by_title_excludes_unpurchased_paid_drone(client, db_session):
+    user = await _create_user(db_session)
+    drone = await _create_drone(
+        db_session, user.id, title="Paid Cello Pad", key=MusicalKey.C, is_free=False, status="ready"
+    )
+    drone.file_s3_key = "drones/paid-key.wav"
+    await db_session.commit()
+
+    token = create_access_token({"sub": str(user.id), "role": user.role.value})
+    resp = await client.get(
+        "/api/v1/drones/titles/Paid Cello Pad/download",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["total"] == 0
+    assert data["items"] == []
