@@ -1,9 +1,10 @@
 import pytest
 import uuid
 from decimal import Decimal
+from unittest.mock import patch, AsyncMock
 from app.models.drone_pad import DronePad, MusicalKey
 from app.models.user import User, UserRole
-from app.services.auth_service import hash_password
+from app.services.auth_service import hash_password, create_access_token
 from app.schemas.drone_pad import DronePadFilter
 
 
@@ -40,10 +41,6 @@ async def test_list_drones_filter_by_title(client, db_session):
     assert data["items"][0]["title"] == "Dark Piano Pad"
 
 
-from app.services.auth_service import create_access_token
-from unittest.mock import patch, AsyncMock
-
-
 @pytest.mark.asyncio
 async def test_download_by_title_returns_items_for_free_drones(client, db_session):
     user = await _create_user(db_session)
@@ -51,7 +48,6 @@ async def test_download_by_title_returns_items_for_free_drones(client, db_sessio
 
     # Give the drone a fake file_s3_key so it qualifies for download
     from sqlalchemy import select
-    from app.models.drone_pad import DronePad
     drone = (await db_session.scalars(select(DronePad).where(DronePad.title == "Dark Piano Pad"))).first()
     drone.file_s3_key = "drones/fake-key.wav"
     await db_session.commit()
@@ -88,3 +84,49 @@ async def test_download_by_title_empty_string_returns_400(client, db_session):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_download_by_title_missing_param_returns_422(client, db_session):
+    user = await _create_user(db_session)
+    token = create_access_token({"sub": str(user.id), "role": user.role.value})
+    resp = await client.get(
+        "/api/v1/drones/download",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_download_by_title_no_match_returns_empty(client, db_session):
+    user = await _create_user(db_session)
+    token = create_access_token({"sub": str(user.id), "role": user.role.value})
+    resp = await client.get(
+        "/api/v1/drones/download?title=nonexistentxyz",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["total"] == 0
+    assert data["items"] == []
+
+
+@pytest.mark.asyncio
+async def test_download_by_title_excludes_unpurchased_paid_drone(client, db_session):
+    user = await _create_user(db_session)
+    paid_drone = await _create_drone(
+        db_session, user.id, title="Paid Cello Pad", key=MusicalKey.C, is_free=False, status="ready"
+    )
+    # Give it a file_s3_key
+    paid_drone.file_s3_key = "drones/paid-key.wav"
+    await db_session.commit()
+
+    token = create_access_token({"sub": str(user.id), "role": user.role.value})
+    resp = await client.get(
+        "/api/v1/drones/download?title=cello",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["total"] == 0
+    assert data["items"] == []
