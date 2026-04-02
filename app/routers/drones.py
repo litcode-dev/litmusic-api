@@ -60,7 +60,7 @@ async def list_drones_by_title(db: AsyncSession = Depends(get_db)):
         }
         for g in groups
     ]
-    await cache_service.set("drone:titles", items, cache_service.TTL_DRONE_CATEGORIES)
+    await cache_service.set("drone:titles", items, cache_service.TTL_DRONE_TITLES)
     return success({"items": items, "total": len(items)})
 
 
@@ -70,6 +70,8 @@ async def download_drones_by_title(
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ):
+    # {title} matching is case-insensitive (func.lower equality in service layer)
+    title = title.strip()[:200]
     items = await drone_service.get_title_downloads(db, user, title)
     return success({"items": items, "total": len(items)})
 
