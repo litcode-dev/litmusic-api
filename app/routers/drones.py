@@ -52,12 +52,13 @@ async def list_drones(
     key: MusicalKey | None = None,
     is_free: bool | None = None,
     category_id: uuid.UUID | None = None,
+    title: str | None = None,
     page: int = 1,
     page_size: int = 50,
     db: AsyncSession = Depends(get_db),
 ):
     filters = DronePadFilter(
-        key=key, is_free=is_free, category_id=category_id,
+        key=key, is_free=is_free, category_id=category_id, title=title,
         page=page, page_size=page_size,
     )
     drones, total = await drone_service.list_drones(db, filters)
