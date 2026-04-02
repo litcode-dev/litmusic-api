@@ -53,7 +53,7 @@ async def list_drones_by_title(db: AsyncSession = Depends(get_db)):
     items = [
         {
             "title": g["title"],
-            "drones": [DronePadResponse.model_validate(d).model_dump() for d in g["drones"]],
+            "drones": [DronePadResponse.model_validate(d).model_dump(mode="json") for d in g["drones"]],
         }
         for g in groups
     ]
