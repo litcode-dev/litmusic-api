@@ -68,6 +68,6 @@ class DronePadFilter(BaseModel):
     key: MusicalKey | None = None
     is_free: bool | None = None
     category_id: uuid.UUID | None = None
-    title: str | None = None
+    title: str | None = Field(default=None, max_length=100)
     page: int = 1
     page_size: int = 50
