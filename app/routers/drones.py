@@ -70,6 +70,16 @@ async def list_drones(
     })
 
 
+@router.get("/download")
+async def download_drones_by_title(
+    title: str,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    items = await drone_service.get_title_downloads(db, user, title)
+    return success({"items": items, "total": len(items)})
+
+
 @router.get("/{drone_id}")
 async def get_drone(drone_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     drone = await drone_service.get_drone(db, drone_id)
