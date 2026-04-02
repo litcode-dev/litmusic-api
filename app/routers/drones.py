@@ -52,13 +52,12 @@ async def list_drones(
     key: MusicalKey | None = None,
     is_free: bool | None = None,
     category_id: uuid.UUID | None = None,
-    title: str | None = None,
     page: int = 1,
     page_size: int = 50,
     db: AsyncSession = Depends(get_db),
 ):
     filters = DronePadFilter(
-        key=key, is_free=is_free, category_id=category_id, title=title,
+        key=key, is_free=is_free, category_id=category_id,
         page=page, page_size=page_size,
     )
     drones, total = await drone_service.list_drones(db, filters)
@@ -68,16 +67,6 @@ async def list_drones(
         "page": page,
         "page_size": page_size,
     })
-
-
-@router.get("/download")
-async def download_drones_by_title(
-    title: str,
-    db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
-):
-    items = await drone_service.get_title_downloads(db, user, title)
-    return success({"items": items, "total": len(items)})
 
 
 @router.get("/{drone_id}")

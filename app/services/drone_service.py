@@ -115,8 +115,6 @@ async def list_drones(db: AsyncSession, filters: DronePadFilter) -> tuple[list[D
         q = q.where(DronePad.is_free == filters.is_free)
     if filters.category_id is not None:
         q = q.where(DronePad.category_id == filters.category_id)
-    if filters.title is not None:
-        q = q.where(DronePad.title.ilike(f"%{filters.title}%"))
 
     count_q = select(func.count()).select_from(q.subquery())
     total = await db.scalar(count_q)
@@ -228,54 +226,6 @@ async def get_category_downloads(
         select(DronePad)
         .options(selectinload(DronePad.category))
         .where(DronePad.category_id == category_id, DronePad.status == "ready")
-        .order_by(DronePad.key)
-    ))
-
-    if not drones:
-        return []
-
-    purchased_ids = set(await db.scalars(
-        select(Purchase.drone_pad_id).where(
-            Purchase.user_id == user.id,
-            Purchase.drone_pad_id.in_([d.id for d in drones]),
-        )
-    ))
-
-    results = []
-    for drone in drones:
-        if not drone.is_free and drone.id not in purchased_ids:
-            continue
-        if not drone.file_s3_key:
-            continue
-        download_url = await s3_service.get_download_url(drone.file_s3_key, expiry_seconds=900)
-        drone.download_count += 1
-        results.append({
-            "drone_pad_id": str(drone.id),
-            "title": drone.title,
-            "key": drone.key,
-            "signed_url": download_url,
-            "aes_key": drone.aes_key,
-            "aes_iv": drone.aes_iv,
-            "expires_in_seconds": 900,
-        })
-
-    await db.commit()
-    return results
-
-
-async def get_title_downloads(
-    db: AsyncSession,
-    user: User,
-    title: str,
-) -> list[dict]:
-    from app.exceptions import AppError
-    if not title.strip():
-        raise AppError("title must not be empty", status_code=400)
-
-    drones = list(await db.scalars(
-        select(DronePad)
-        .options(selectinload(DronePad.category))
-        .where(DronePad.title.ilike(f"%{title}%"), DronePad.status == "ready")
         .order_by(DronePad.key)
     ))
 
