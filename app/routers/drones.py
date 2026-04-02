@@ -47,6 +47,19 @@ async def download_drones_by_category(
     return success({"items": items, "total": len(items)})
 
 
+@router.get("/titles")
+async def list_drones_by_title(db: AsyncSession = Depends(get_db)):
+    groups = await drone_service.list_drones_grouped_by_title(db)
+    items = [
+        {
+            "title": g["title"],
+            "drones": [DronePadResponse.model_validate(d).model_dump() for d in g["drones"]],
+        }
+        for g in groups
+    ]
+    return success({"items": items, "total": len(items)})
+
+
 @router.get("")
 async def list_drones(
     key: MusicalKey | None = None,
