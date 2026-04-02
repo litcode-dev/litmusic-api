@@ -127,11 +127,14 @@ async def list_drones(db: AsyncSession, filters: DronePadFilter) -> tuple[list[D
 
 
 async def list_drones_grouped_by_title(db: AsyncSession) -> list[dict]:
+    # Returns all ready drones grouped by title. Capped at 500 rows as a
+    # safety guard; the caller receives all groups in a single response.
     drones = list(await db.scalars(
         select(DronePad)
         .options(selectinload(DronePad.category))
         .where(DronePad.status == "ready")
         .order_by(DronePad.title, DronePad.key)
+        .limit(500)
     ))
     groups: dict[str, list] = {}
     for drone in drones:

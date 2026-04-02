@@ -49,6 +49,9 @@ async def download_drones_by_category(
 
 @router.get("/titles")
 async def list_drones_by_title(db: AsyncSession = Depends(get_db)):
+    cached = await cache_service.get("drone:titles")
+    if cached is not None:
+        return success(cached)
     groups = await drone_service.list_drones_grouped_by_title(db)
     items = [
         {
@@ -57,6 +60,7 @@ async def list_drones_by_title(db: AsyncSession = Depends(get_db)):
         }
         for g in groups
     ]
+    await cache_service.set("drone:titles", items, cache_service.TTL_DRONE_CATEGORIES)
     return success({"items": items, "total": len(items)})
 
 
